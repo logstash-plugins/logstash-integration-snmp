@@ -405,7 +405,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
 
     before(:each) do
       expect(LogStash::SnmpClient).to receive(:new).and_return(mock_client)
-      expect(mock_client).to receive(:get).and_return({"foo" => "bar"})
+      allow(mock_client).to receive(:get).and_return({"foo" => "bar"})
     end
 
     it "should call the close method upon termination" do
