@@ -1,0 +1,31 @@
+:plugin: snmp
+:type: integration
+:no_codec:
+
+///////////////////////////////////////////
+START - GENERATED VARIABLES, DO NOT EDIT!
+///////////////////////////////////////////
+:version: %VERSION%
+:release_date: %RELEASE_DATE%
+:changelog_url: %CHANGELOG_URL%
+:include_path: ../../../../logstash/docs/include
+///////////////////////////////////////////
+END - GENERATED VARIABLES, DO NOT EDIT!
+///////////////////////////////////////////
+
+[id="plugins-{type}s-{plugin}"]
+
+=== SNMP Integration Plugin
+
+include::{include_path}/plugin_header.asciidoc[]
+
+==== Description
+
+The SNMP Integration Plugin provides integrated plugins for working with SNMP:
+
+ - {logstash-ref}/plugins-input-snmp.html[SNMP Input Plugin]
+ - {logstash-ref}/plugins-input-snmptrap.html[SNMP Trap Input Plugin]
+
+:no_codec!:
+
+
