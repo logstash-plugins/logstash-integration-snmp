@@ -14,4 +14,4 @@ else
 fi
 
 # docker will look for: "./docker-compose.yml" (and "./docker-compose.override.yml")
-docker-compose up -f docker-compose.yml $docker_compose_override --exit-code-from logstash
+docker-compose -f docker-compose.yml $docker_compose_override up --exit-code-from logstash
