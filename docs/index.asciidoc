@@ -23,8 +23,9 @@ include::{include_path}/plugin_header.asciidoc[]
 
 The SNMP Integration Plugin provides integrated plugins for working with SNMP:
 
- - {logstash-ref}/plugins-input-snmp.html[SNMP Input Plugin]
- - {logstash-ref}/plugins-input-snmptrap.html[SNMP Trap Input Plugin]
+//Uncomment after generated the initial versions of the target files
+// - {logstash-ref}/plugins-input-snmp.html[SNMP input plugin]
+// - {logstash-ref}/plugins-input-snmptrap.html[Snmptrap input plugin]
 
 :no_codec!:
 
