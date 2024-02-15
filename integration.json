@@ -1,0 +1,7 @@
+{
+  "name": "logstash-integration-snmp",
+  "plugins": [
+    "logstash-input-snmp",
+    "logstash-input-snmptrap"
+  ]
+}
