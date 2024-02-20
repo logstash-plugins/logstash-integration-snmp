@@ -199,17 +199,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       @client_definitions << definition
     end
 
-    @client = build_client(mib_manager, client_protocols)
-  end
-
-  def build_client(mib_manager, client_protocols)
-    client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, client_protocols)
-
-    if @security_name && @auth_protocol
-      client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
-    end
-
-    client_builder.build
+    @client = build_client!(mib_manager, client_protocols)
   end
 
   def run(queue)
@@ -384,6 +374,14 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   def validate_strip!
     raise(LogStash::ConfigurationError, "you can not specify both oid_root_skip and oid_path_length") if @oid_root_skip > 0 and @oid_path_length > 0
+  end
+
+  def build_client!(mib_manager, client_protocols)
+    client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, client_protocols)
+    if @security_name && @auth_protocol
+      client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
+    end
+    client_builder.build
   end
 
   ##

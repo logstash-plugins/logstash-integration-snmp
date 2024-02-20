@@ -18,6 +18,13 @@ String mockitoVersion = '5.9.0'
 sourceCompatibility = JavaVersion.VERSION_11
 targetCompatibility = JavaVersion.VERSION_11
 
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
 repositories {
     mavenCentral()
 }
@@ -44,6 +51,14 @@ dependencies {
 
 test {
     useJUnitPlatform()
+
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+
+configurations {
+    testImplementation.extendsFrom compileOnly
 }
 
 task generateGemJarRequiresFile {

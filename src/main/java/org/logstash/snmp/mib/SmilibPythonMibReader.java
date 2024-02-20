@@ -1,17 +1,17 @@
 package org.logstash.snmp.mib;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.io.JsonStringEncoder;
-import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.snmp4j.smi.OID;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,13 +40,12 @@ class SmilibPythonMibReader implements MibReader {
                 .collect(Collectors.joining("|"));
     }
 
-    private static final ObjectMapper MAPPER = JsonMapper.builder()
-            .enable(JsonReadFeature.ALLOW_TRAILING_COMMA)
-            .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
-            .enable(JsonReadFeature.ALLOW_YAML_COMMENTS)
-            .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
-            .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
-            .build();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .enable(JsonParser.Feature.ALLOW_TRAILING_COMMA)
+            .enable(JsonParser.Feature.ALLOW_COMMENTS)
+            .enable(JsonParser.Feature.ALLOW_YAML_COMMENTS)
+            .enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
+            .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
     @Override
     public void read(List<Path> paths, BiConsumer<OID, OidData> consumer) throws InvalidMbiFileException {
@@ -71,13 +70,15 @@ class SmilibPythonMibReader implements MibReader {
                 continue;
             }
 
-            for (final Map.Entry<String, JsonNode> property : nodes.properties()) {
+            for (Iterator<Map.Entry<String, JsonNode>> it = nodes.fields(); it.hasNext(); ) {
+                final Map.Entry<String, JsonNode> property = it.next();
                 readNode(path, property.getKey(), property.getValue(), consumer);
             }
 
             final JsonNode notifications = jsonNode.get("notifications");
             if (notifications != null) {
-                for (final Map.Entry<String, JsonNode> property : notifications.properties()) {
+                for (Iterator<Map.Entry<String, JsonNode>> it = notifications.fields(); it.hasNext(); ) {
+                    final Map.Entry<String, JsonNode> property = it.next();
                     readNode(path, property.getKey(), property.getValue(), consumer);
                 }
             }

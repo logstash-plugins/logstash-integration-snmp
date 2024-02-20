@@ -2,7 +2,7 @@
 require "logstash/devutils/rspec/spec_helper"
 require "logstash/devutils/rspec/shared_examples"
 require 'logstash/plugin_mixins/ecs_compatibility_support/spec_helper'
-require "logstash/inputs/snmp"
+require_relative '../../../lib/logstash/inputs/snmp'
 
 describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   let(:mock_target) { double("org.snmp4j.Target") }
@@ -15,7 +15,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
     }}
 
     before do
-      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
       allow(mock_client).to receive(:listen)
       allow(mock_client).to receive(:create_target).and_return(mock_target)
       expect(mock_client).to receive(:get).and_return({})
@@ -25,6 +25,11 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   end
 
   context "OIDs options validation" do
+
+    before(:each) do
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
+    end
+
     let(:valid_configs) {
         [
             {"get" => ["1.3.6.1.2.1.1.1.0"], "hosts" => [{"host" => "udp:127.0.0.1/161"}]},
@@ -62,6 +67,11 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   end
 
   context "hosts options validation" do
+
+    before(:each) do
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
+    end
+
     let(:valid_configs) {
       [
           {"get" => ["1.0"], "hosts" => [{"host" => "udp:127.0.0.1/161"}]},
@@ -110,6 +120,11 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   end
 
   context "v3_users options validation" do
+
+    before(:each) do
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
+    end
+
     let(:valid_configs) {
       [
 	  {"get" => ["1.0"], "hosts" => [{"host" => "udp:127.0.0.1/161", "version" => "3"}], "security_name" => "ciscov3", "auth_protocol" => "sha", "auth_pass" => "myshapass", "priv_protocol" => "aes", "priv_pass" => "myprivpass", "security_level" => "authNoPriv"},
@@ -138,7 +153,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
 
     before(:each) do
       allow_any_instance_of(described_class).to receive(:ecs_compatibility).and_return(ecs_compatibility)
-      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
       allow(mock_client).to receive(:listen)
       allow(mock_client).to receive(:create_target).and_return(mock_target)
       # devutils in v6 calls close on the test pipelines while it does not in v7+
@@ -407,7 +422,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
     end
 
     before(:each) do
-      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client!).and_return(mock_client)
       allow(mock_client).to receive(:listen)
       allow(mock_client).to receive(:create_target).and_return(mock_target)
       allow(mock_client).to receive(:get).and_return({"foo" => "bar"})

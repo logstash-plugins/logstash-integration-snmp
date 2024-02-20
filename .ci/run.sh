@@ -5,7 +5,7 @@ env
 set -ex
 
 if [[ "$INTEGRATION" == "true" ]]; then
-  bundle exec rspec --format=documentation --tag integration spec/integration
+  bundle exec rake test:integration
 else
-  bundle exec rspec --format=documentation spec/unit
+  bundle exec rake test:unit
 fi

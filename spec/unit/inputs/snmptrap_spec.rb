@@ -1,7 +1,7 @@
 require "logstash/devutils/rspec/spec_helper"
 require "logstash/devutils/rspec/shared_examples"
 require 'logstash/plugin_mixins/ecs_compatibility_support/spec_helper'
-require 'logstash/inputs/snmptrap'
+require_relative '../../../lib/logstash/inputs/snmptrap'
 
 describe LogStash::Inputs::Snmptrap, :ecs_compatibility_support do
 
