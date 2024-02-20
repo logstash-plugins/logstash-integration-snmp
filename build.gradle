@@ -6,7 +6,17 @@ apply plugin: 'java'
 apply plugin: 'idea'
 apply plugin: 'maven-publish'
 
+group "org.logstash.integrations"
+version "${new File("VERSION").text.trim()}"
+
 def SNMP4J_VERSION = '2.8.4'
+String junitVersion = '5.9.2'
+String log4jVersion = '2.17.0'
+String jacksonVersion = '2.15.3'
+String mockitoVersion = '5.9.0'
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
 
 repositories {
     mavenCentral()
@@ -14,6 +24,26 @@ repositories {
 
 dependencies {
     implementation "org.snmp4j:snmp4j:${SNMP4J_VERSION}"
+    implementation group: 'org.yaml', name: 'snakeyaml', version: '2.0'
+
+    // provided by Logstash
+    compileOnly "org.apache.logging.log4j:log4j-api:${log4jVersion}"
+    compileOnly "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
+    compileOnly "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    compileOnly "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+
+    testImplementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+    testImplementation "org.apache.logging.log4j:log4j-core:${log4jVersion}"
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junitVersion}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 task generateGemJarRequiresFile {
@@ -25,6 +55,8 @@ task generateGemJarRequiresFile {
             configurations.runtimeClasspath.allDependencies.each {
                 w << "require_jar(\'${it.group}\', \'${it.name}\', \'${it.version}\')\n"
             }
+
+            w << "require_jar(\'${project.group}\', \'${project.name}\', \'${project.version}\')\n"
         }
     }
 }
@@ -39,7 +71,12 @@ task vendor {
             newJarFile.mkdirs()
             Files.copy(f.toPath(), newJarFile.toPath(), REPLACE_EXISTING)
         }
+
+        String projectGroupPath = project.group.replaceAll('\\.', '/')
+        File projectJarFile = file("${vendorPathPrefix}/${projectGroupPath}/${project.name}/${project.version}/${project.name}-${project.version}.jar")
+        projectJarFile.mkdirs()
+        Files.copy(file("$buildDir/libs/${project.name}-${project.version}.jar").toPath(), projectJarFile.toPath(), REPLACE_EXISTING)
     }
 }
 
-vendor.dependsOn(generateGemJarRequiresFile)
+vendor.dependsOn(jar, generateGemJarRequiresFile)

@@ -5,8 +5,8 @@ require 'logstash/plugin_mixins/ecs_compatibility_support/spec_helper'
 require "logstash/inputs/snmp"
 
 describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
-
-  let(:mock_client) { double("LogStash::SnmpClient") }
+  let(:mock_target) { double("org.snmp4j.Target") }
+  let(:mock_client) { double("org.logstash.snmp.SnmpClient") }
 
   it_behaves_like "an interruptible input plugin" do
     let(:config) {{
@@ -15,7 +15,9 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
     }}
 
     before do
-      expect(LogStash::SnmpClient).to receive(:new).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow(mock_client).to receive(:listen)
+      allow(mock_client).to receive(:create_target).and_return(mock_target)
       expect(mock_client).to receive(:get).and_return({})
       # devutils in v6 calls close on the test pipelines while it does not in v7+
       expect(mock_client).to receive(:close).at_most(:once)
@@ -136,8 +138,9 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
 
     before(:each) do
       allow_any_instance_of(described_class).to receive(:ecs_compatibility).and_return(ecs_compatibility)
-
-      expect(LogStash::SnmpClient).to receive(:new).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow(mock_client).to receive(:listen)
+      allow(mock_client).to receive(:create_target).and_return(mock_target)
       # devutils in v6 calls close on the test pipelines while it does not in v7+
       allow(mock_client).to receive(:close).at_most(:once)
     end
@@ -404,7 +407,9 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
     end
 
     before(:each) do
-      expect(LogStash::SnmpClient).to receive(:new).and_return(mock_client)
+      allow_any_instance_of(described_class).to receive(:build_client).and_return(mock_client)
+      allow(mock_client).to receive(:listen)
+      allow(mock_client).to receive(:create_target).and_return(mock_target)
       allow(mock_client).to receive(:get).and_return({"foo" => "bar"})
     end
 

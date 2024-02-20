@@ -1,0 +1,16 @@
+
+MIB = {
+    "moduleName" : "logstash",
+
+    "logstash" : {
+        "nodetype" : "module",
+        "language" : "SMIv2",
+    },
+
+    "nodes" : {
+        "accountingControlMIB" : {
+            "nodetype" : "node",
+            "moduleName" : "logstash",
+        }, # node
+    }, # nodes
+}

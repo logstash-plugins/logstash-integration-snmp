@@ -1,6 +1,8 @@
+VERSION = File.read(File.expand_path(File.join(File.dirname(__FILE__), "VERSION"))).strip unless defined?(VERSION)
+
 Gem::Specification.new do |s|
   s.name = 'logstash-integration-snmp'
-  s.version         = '4.0.0'
+  s.version         = VERSION
   s.licenses = ['Apache License (2.0)']
   s.summary         = "Integration with SNMP - Logstash plugins"
   s.description     = "This gem is a Logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/logstash-plugin install gemname. This gem is not a stand-alone program"
@@ -34,4 +36,5 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'rspec-wait'
   s.add_runtime_dependency 'snmp'
   s.add_development_dependency 'logstash-devutils', '>= 2.3'
+  s.platform = "java"
 end

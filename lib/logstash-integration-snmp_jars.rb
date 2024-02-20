@@ -2,3 +2,5 @@
 
 require 'jar_dependencies'
 require_jar('org.snmp4j', 'snmp4j', '2.8.4')
+require_jar('org.yaml', 'snakeyaml', '2.0')
+require_jar('org.logstash.integrations', 'logstash-integration-snmp', '4.0.0')
