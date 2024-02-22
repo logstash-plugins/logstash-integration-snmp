@@ -378,7 +378,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   def build_client!(mib_manager, client_protocols)
     client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, client_protocols)
-    if @security_name && @auth_protocol
+    unless @security_name.nil?
       client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
     end
     client_builder.build

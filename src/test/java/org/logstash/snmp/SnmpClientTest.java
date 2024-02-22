@@ -17,6 +17,7 @@ import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
 import org.snmp4j.mp.MPv3;
 import org.snmp4j.mp.SnmpConstants;
+import org.snmp4j.security.AuthHMAC192SHA256;
 import org.snmp4j.security.AuthMD5;
 import org.snmp4j.security.Priv3DES;
 import org.snmp4j.security.PrivacyProtocol;
@@ -60,6 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,7 +78,7 @@ import static org.mockito.Mockito.when;
 
 class SnmpClientTest {
     private static final String HOST = "127.0.0.1";
-    private static final int PORT = 1061;
+    private static final int PORT = 1069;
     private static final String LOCAL_ENGINE_ID = new String(MPv3.createLocalEngineID());
     private static final UsmUser USER = new UsmUser(
             new OctetString("admin"),
@@ -150,7 +152,6 @@ class SnmpClientTest {
 
     @Test
     void shouldAddSnmpUsmUsers() throws IOException {
-        final Integer32 usmModelId = new Integer32(3);
         try (final SnmpClient client = createClient()) {
             final USM usm = client.getSnmp().getUSM();
             assertNotNull(usm);
@@ -158,6 +159,50 @@ class SnmpClientTest {
 
             assertNotNull(user);
             assertEquals(USER, user.getUsmUser());
+        }
+    }
+
+    @Test
+    void shouldAddSnmpUsmUsersPerClientInstance() throws IOException {
+        // This test ensures that two plugin instances (clients) aren't sharing the same USM
+        // through the global security model repository. Otherwise, users with the same name
+        // but different passwords would conflict.
+        final OctetString securityName = new OctetString("root");
+        try (final SnmpClient clientOne = SnmpClient.builder(mibManager, Set.of("tcp"), PORT)
+                .addUsmUser(securityName.toString(),
+                        "hmac192sha256",
+                        "client-one-pass",
+                        "3des",
+                        "client-one-pass"
+                ).build();
+             final SnmpClient clientTwo = SnmpClient.builder(mibManager, Set.of("tcp"), PORT + 1)
+                     .addUsmUser(securityName.toString(),
+                             "md5",
+                             "client-two-pass",
+                             "des",
+                             "client-two-pass"
+                     ).build()
+        ) {
+            final USM usmClientOne = clientOne.getSnmp().getUSM();
+            final USM usmClientTwo = clientTwo.getSnmp().getUSM();
+
+            assertNotNull(usmClientOne);
+            assertNotNull(usmClientTwo);
+            assertNotEquals(usmClientOne, usmClientTwo);
+
+            final UsmUser userClientOne = usmClientOne.getUser(new OctetString(), securityName).getUsmUser();
+            assertEquals(securityName, userClientOne.getSecurityName());
+            assertEquals(AuthHMAC192SHA256.ID, userClientOne.getAuthenticationProtocol());
+            assertEquals(new OctetString("client-one-pass"), userClientOne.getAuthenticationPassphrase());
+            assertEquals(SnmpConstants.usm3DESEDEPrivProtocol, userClientOne.getPrivacyProtocol());
+            assertEquals(new OctetString("client-one-pass"), userClientOne.getPrivacyPassphrase());
+
+            final UsmUser userClientTwo = usmClientTwo.getUser(new OctetString(), securityName).getUsmUser();
+            assertEquals(securityName, userClientTwo.getSecurityName());
+            assertEquals(AuthMD5.ID, userClientTwo.getAuthenticationProtocol());
+            assertEquals(new OctetString("client-two-pass"), userClientTwo.getAuthenticationPassphrase());
+            assertEquals(SnmpConstants.usmDESPrivProtocol, userClientTwo.getPrivacyProtocol());
+            assertEquals(new OctetString("client-two-pass"), userClientTwo.getPrivacyPassphrase());
         }
     }
 

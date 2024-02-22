@@ -98,9 +98,10 @@ public class SnmpClient implements Closeable {
         this.contextEngineId = contextEngineId;
         this.contextName = contextName;
 
-        // security protocols
+        // global security models/protocols
         SecurityProtocols.getInstance().addDefaultProtocols();
         SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
+        SecurityModels.getInstance().addSecurityModel(new TSM(localEngineId, false));
 
         this.snmp = createSnmpClient(protocols, host, port, localEngineId, users, threadPoolName, threadPoolSize);
     }
@@ -109,35 +110,37 @@ public class SnmpClient implements Closeable {
             Set<String> protocols,
             String host,
             int port,
-            OctetString localEngineID,
+            OctetString localEngineId,
             List<UsmUser> usmUsers,
             String threadPoolName,
             int threadPoolSize
     ) throws IOException {
         final int engineBootCount = 0;
-        final Snmp snmp = new Snmp(createMessageDispatcher(localEngineID, threadPoolName, threadPoolSize));
+        final USM usm = createUsm(usmUsers, localEngineId, engineBootCount);
+        final Snmp snmp = new Snmp(createMessageDispatcher(localEngineId, usm, engineBootCount, threadPoolName, threadPoolSize));
+
         for (final String protocol : protocols) {
             snmp.addTransportMapping(createTransport(parseAddress(protocol, host, port)));
-        }
-
-        final MPv3 mpv3 = (MPv3) snmp.getMessageProcessingModel(MPv3.ID);
-        if (mpv3 != null) {
-            mpv3.setLocalEngineID(localEngineID.getValue());
-            mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
-        }
-
-        if (usmUsers != null && !usmUsers.isEmpty()) {
-            final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
-            SecurityModels.getInstance().addSecurityModel(usm);
-            SecurityModels.getInstance().addSecurityModel(new TSM(localEngineID, false));
-            usmUsers.forEach(usm::addUser);
         }
 
         return snmp;
     }
 
+    private static USM createUsm(List<UsmUser> usmUsers, OctetString localEngineID, int engineBootCount) {
+        if (usmUsers == null || usmUsers.isEmpty()) {
+            return null;
+        }
+
+        final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
+        usmUsers.forEach(usm::addUser);
+
+        return usm;
+    }
+
     private static MessageDispatcher createMessageDispatcher(
-            OctetString localEngineID,
+            OctetString localEngineId,
+            USM usm,
+            int engineBootCount,
             String threadPoolName,
             int threadPoolSize
     ) {
@@ -146,7 +149,10 @@ public class SnmpClient implements Closeable {
 
         dispatcher.addMessageProcessingModel(new MPv1());
         dispatcher.addMessageProcessingModel(new MPv2c());
-        dispatcher.addMessageProcessingModel(new MPv3(localEngineID.getValue()));
+
+        final MPv3 mpv3 = usm != null ? new MPv3(usm) : new MPv3(localEngineId.getValue());
+        mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
+        dispatcher.addMessageProcessingModel(mpv3);
 
         return dispatcher;
     }
