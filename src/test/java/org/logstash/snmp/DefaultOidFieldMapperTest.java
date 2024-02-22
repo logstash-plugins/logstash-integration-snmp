@@ -101,6 +101,6 @@ class DefaultOidFieldMapperTest {
                 IllegalArgumentException.class,
                 () -> new DefaultOidFieldMapper(1, 1));
 
-        assertEquals("Specify either an oidRootSkip and oidPathLength", exception.getMessage());
+        assertEquals("Specify either an oidRootSkip or oidPathLength", exception.getMessage());
     }
 }

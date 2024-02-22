@@ -16,7 +16,7 @@ public class DefaultOidFieldMapper implements OidFieldMapper {
 
     public DefaultOidFieldMapper(int oidRootSkip, int oidPathLength) {
         if (oidRootSkip != 0 && oidPathLength != 0) {
-            throw new IllegalArgumentException("Specify either an oidRootSkip and oidPathLength");
+            throw new IllegalArgumentException("Specify either an oidRootSkip or oidPathLength");
         }
 
         if (oidRootSkip < 0) {

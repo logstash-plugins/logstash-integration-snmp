@@ -48,20 +48,20 @@ class SmilibPythonMibReader implements MibReader {
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
     @Override
-    public void read(List<Path> paths, BiConsumer<OID, OidData> consumer) throws InvalidMbiFileException {
+    public void read(List<Path> paths, BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
         for (final Path path : paths) {
             String content;
             try {
                 content = sanitize(Files.readString(path));
             } catch (Exception e) {
-                throw new InvalidMbiFileException(String.format("Error reading MIB file: %s", path), e);
+                throw new InvalidMibFileException(String.format("Error reading MIB file: %s", path), e);
             }
 
             final JsonNode jsonNode;
             try {
                 jsonNode = MAPPER.readTree(content);
             } catch (Exception e) {
-                throw new InvalidMbiFileException(String.format("Error parsing MIB file: %s", path), e);
+                throw new InvalidMibFileException(String.format("Error parsing MIB file: %s", path), e);
             }
 
             final JsonNode nodes = jsonNode.get("nodes");
@@ -131,7 +131,7 @@ class SmilibPythonMibReader implements MibReader {
 
                     matcher.appendReplacement(sb, Matcher.quoteReplacement("\"" + new String(chars) + "\""));
                 } catch (Exception e) {
-                    throw new InvalidMbiFileException(e);
+                    throw new InvalidMibFileException(e);
                 }
             }
         }

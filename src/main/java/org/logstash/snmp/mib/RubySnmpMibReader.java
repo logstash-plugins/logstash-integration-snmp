@@ -16,14 +16,14 @@ class RubySnmpMibReader implements MibReader {
     static final String FILE_EXTENSION = "yaml";
 
     @Override
-    public void read(final List<Path> paths, final BiConsumer<OID, OidData> consumer) throws InvalidMbiFileException {
+    public void read(final List<Path> paths, final BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
         final Yaml yaml = new Yaml();
         for (final Path path : paths) {
             final Map<String, String> configMap;
             try {
                 configMap = yaml.load(Files.newBufferedReader(path));
             } catch (Exception e) {
-                throw new InvalidMbiFileException(String.format("Error reading MIB file: %s", path), e);
+                throw new InvalidMibFileException(String.format("Error reading MIB file: %s", path), e);
             }
 
             final String moduleName = FileUtils.getFileNameWithoutExtension(path);

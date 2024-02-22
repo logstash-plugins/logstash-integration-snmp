@@ -51,8 +51,8 @@ class RubySnmpMibReaderTest {
     @Test
     void shouldThrowInvalidMbiWhenFileContentIsInvalid() {
         final List<Path> paths = List.of(INVALID_MIB);
-        final InvalidMbiFileException exception = assertThrows(
-                InvalidMbiFileException.class,
+        final InvalidMibFileException exception = assertThrows(
+                InvalidMibFileException.class,
                 () -> reader.read(paths, (oid, oidData) -> {
                 })
         );
