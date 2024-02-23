@@ -227,9 +227,9 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       result = {}
 
       if !definition[:get].empty?
-        oids = definition[:get].map { |oid| OID.new(oid) }
+        oids = definition[:get]
         begin
-          data = @client.get(target, oids)
+          data = @client.get(target, oids.map { |oid| OID.new(oid) })
           if data&.any?
             result.update(data)
           else
