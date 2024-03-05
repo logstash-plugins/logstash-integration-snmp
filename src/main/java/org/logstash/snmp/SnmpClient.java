@@ -3,7 +3,6 @@ package org.logstash.snmp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.logstash.snmp.mib.MibManager;
-import org.snmp4j.CommandResponder;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.MessageDispatcherImpl;
@@ -60,7 +59,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
 import static java.util.Objects.nonNull;
 import static org.logstash.snmp.SnmpUtils.parseSecurityLevel;
@@ -72,7 +70,6 @@ public class SnmpClient implements Closeable {
     private final Snmp snmp;
     private final OctetString contextEngineId;
     private final OctetString contextName;
-    private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
@@ -159,17 +156,6 @@ public class SnmpClient implements Closeable {
 
     public void listen() throws IOException {
         getSnmp().listen();
-    }
-
-    public void listen(CommandResponder commandResponder) throws IOException {
-        getSnmp().addCommandResponder(commandResponder);
-        getSnmp().listen();
-
-        try {
-            stopCountDownLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     public Map<String, Object> get(Target target, OID[] oids) throws IOException {
@@ -432,8 +418,6 @@ public class SnmpClient implements Closeable {
             snmp.close();
         } catch (Exception e) {
             logger.error("Error closing SNMP client", e);
-        } finally {
-            stopCountDownLatch.countDown();
         }
     }
 

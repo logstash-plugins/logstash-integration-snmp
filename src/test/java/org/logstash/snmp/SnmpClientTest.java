@@ -242,40 +242,6 @@ class SnmpClientTest {
     }
 
     @Test
-    void listenWithCommandResponderShouldAddResponderAndBlock() throws Exception {
-        try (final SnmpClient client = spy(createClient())) {
-            final Snmp snmp = spy(client.getSnmp());
-
-            when(client.getSnmp())
-                    .thenReturn(snmp);
-
-            final CountDownLatch snmpListenLatch = new CountDownLatch(1);
-            doAnswer(ignore -> {
-                snmpListenLatch.countDown();
-                return null;
-            }).when(snmp).listen();
-
-            final CommandResponder commandResponder = event -> {/*Nothing to do here*/};
-            final Thread thread = new Thread(() -> {
-                try {
-                    client.listen(commandResponder);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-
-            thread.start();
-
-            // Allow the client to start listening
-            final boolean listenInvoked = snmpListenLatch.await(500, TimeUnit.MILLISECONDS);
-            assertTrue(listenInvoked);
-
-            // Check if the command responder was added
-            verify(snmp).addCommandResponder(commandResponder);
-        }
-    }
-
-    @Test
     void getShouldProperlyCreateV1Pdu() throws IOException {
         try (final SnmpClient client = createClient()) {
             assertGetPdu(
