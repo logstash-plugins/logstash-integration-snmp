@@ -120,7 +120,10 @@ class MibManagerTest {
         mibManager.map(oid);
 
         verify(oidFieldMapper)
-                .map(oid, new String[]{"value1", "value5", "value3"}, expectedOidData);
+                .map(eq(oid), argThat(p->
+                        "value1".equals(p[0].getData().getName()) &&
+                        "value5".equals(p[1].getData().getName()) &&
+                        "value3".equals(p[2].getData().getName())));
     }
 
     @Test

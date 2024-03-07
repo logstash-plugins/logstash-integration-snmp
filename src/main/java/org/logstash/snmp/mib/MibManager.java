@@ -2,6 +2,7 @@ package org.logstash.snmp.mib;
 
 import org.logstash.snmp.DefaultOidFieldMapper;
 import org.logstash.snmp.OidFieldMapper;
+import org.logstash.snmp.OidFieldMapper.ResolvedIdentifier;
 import org.snmp4j.smi.OID;
 
 import java.io.IOException;
@@ -11,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -58,13 +58,12 @@ public class MibManager {
     }
 
     public String map(final OID oid) {
-        final List<String> resolvedIdentifiers = new ArrayList<>(oid.getValue().length);
-        final Optional<OidData> data = this.oidTrie.find(
+        final List<ResolvedIdentifier> resolvedIdentifiers = new ArrayList<>(oid.getValue().length);
+        this.oidTrie.find(
                 oid,
-                node -> resolvedIdentifiers.add(node.hasData() ? node.getData().getName() : String.valueOf(node.getIdentifier()))
+                node -> resolvedIdentifiers.add(new ResolvedIdentifier(node.getIdentifier(), node.getData()))
         );
-
-        return fieldMapper.map(oid, resolvedIdentifiers.toArray(new String[0]), data.orElse(null));
+        return fieldMapper.map(oid, resolvedIdentifiers.toArray(ResolvedIdentifier[]::new));
     }
 
     Map<String, MibReader> getMibFileReaders() {

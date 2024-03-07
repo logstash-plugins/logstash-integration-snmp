@@ -1,6 +1,5 @@
 package org.logstash.snmp;
 
-import org.logstash.snmp.mib.OidData;
 import org.snmp4j.smi.OID;
 
 import java.util.Arrays;
@@ -32,12 +31,14 @@ public class DefaultOidFieldMapper implements OidFieldMapper {
     }
 
     @Override
-    public String map(OID oid, final String[] resolvedOidIdentifiers, OidData data) {
+    public String map(OID oid, final ResolvedIdentifier[] resolvedOidIdentifiers) {
         final int[] identifiers = oid.getValue();
         final String[] mappedIdentifiers;
 
         if (identifiers.length == resolvedOidIdentifiers.length) {
-            mappedIdentifiers = resolvedOidIdentifiers;
+            mappedIdentifiers = Arrays.stream(resolvedOidIdentifiers)
+                    .map(this::getNameOrIdentifier)
+                    .toArray(String[]::new);
         } else {
             mappedIdentifiers = mapPartiallyQualifiedOid(oid, resolvedOidIdentifiers);
         }
@@ -57,7 +58,7 @@ public class DefaultOidFieldMapper implements OidFieldMapper {
         return String.join(".", mappedIdentifiers);
     }
 
-    private String[] mapPartiallyQualifiedOid(OID oid, final String[] resolvedOidIdentifiers) {
+    private String[] mapPartiallyQualifiedOid(OID oid, final ResolvedIdentifier[] resolvedOidIdentifiers) {
         final String[] mappedIdentifiers = new String[oid.size()];
         final int resolvedOidUpperBound = resolvedOidIdentifiers.length - 1;
 
@@ -65,10 +66,18 @@ public class DefaultOidFieldMapper implements OidFieldMapper {
             if (i > resolvedOidUpperBound) {
                 mappedIdentifiers[i] = String.valueOf(oid.get(i));
             } else {
-                mappedIdentifiers[i] = resolvedOidIdentifiers[i];
+                mappedIdentifiers[i] = getNameOrIdentifier(resolvedOidIdentifiers[i]);
             }
         }
 
         return mappedIdentifiers;
+    }
+
+    private String getNameOrIdentifier(ResolvedIdentifier resolvedIdentifier) {
+        if (resolvedIdentifier.getData() != null) {
+            return resolvedIdentifier.getData().getName();
+        }
+
+        return String.valueOf(resolvedIdentifier.getIdentifier());
     }
 }
