@@ -44,6 +44,14 @@ class OidTrieTest {
     }
 
     @Test
+    void insertShouldNotLogWhenOverridingWithSameDataButDifferentModule() {
+        oidTrie.insert(new OID("1.3.6.1.2.1.60.2"), new OidData("node", "foo", "FOO"));
+        oidTrie.insert(new OID("1.3.6.1.2.1.60.2"), new OidData("node", "foo", "BAR"));
+
+        assertTrue(loggerExt.getAppender().isEmpty());
+    }
+
+    @Test
     void insertShouldLogWhenOidDataIsOverridden() {
         final OID oid = new OID("1.3.6.1.2.1.60.2");
         final OidData newestOidData = new OidData("node", "second", "DUMMY");
@@ -53,7 +61,7 @@ class OidTrieTest {
 
         loggerExt.getAppender().assertLogWithMessage(
                 OidTrie.class,
-                Level.DEBUG,
+                Level.WARN,
                 "warning: overwriting MIB OID '1.3.6.1.2.1.60.2' and name 'first' with new name 'second' from module 'DUMMY'"
         );
     }
@@ -68,6 +76,18 @@ class OidTrieTest {
 
         final OidData oidData = oidTrie.find(oid).orElseThrow();
         assertEquals(oidData, newestOidData);
+    }
+
+    @Test
+    void insertShouldNotReplaceOidDataWhenOtherModuleValuesAreEquals() {
+        final OID oid = new OID("1.3.6.1.2.1.60.2");
+        final OidData firstOidData = new OidData("node", "first", "OLD");
+
+        oidTrie.insert(oid, firstOidData);
+        oidTrie.insert(oid, new OidData("node", "first", "NEW"));
+
+        final OidData oidData = oidTrie.find(oid).orElseThrow();
+        assertEquals(oidData, firstOidData);
     }
 
     @Test

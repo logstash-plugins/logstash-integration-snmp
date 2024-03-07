@@ -36,12 +36,13 @@ class OidTrie {
 
             current = node.getChildren();
             if (i + 1 == oidIdentifiers.length) {
-                if (node.hasData() && !node.getData().equals(data)) {
-                    logger.debug("warning: overwriting MIB OID '{}' and name '{}' with new name '{}' from module '{}'",
+                if (!node.hasData()) {
+                    node.setData(data);
+                } else if (!node.getData().equalsIgnoreModuleName(data)) {
+                    logger.warn("warning: overwriting MIB OID '{}' and name '{}' with new name '{}' from module '{}'",
                             oid, node.getData().getName(), data.getName(), data.getModuleName());
+                    node.setData(data);
                 }
-
-                node.setData(data);
             }
         }
     }

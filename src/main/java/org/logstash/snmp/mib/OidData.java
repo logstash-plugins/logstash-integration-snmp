@@ -25,6 +25,11 @@ public final class OidData {
         return moduleName;
     }
 
+    public boolean equalsIgnoreModuleName(OidData other) {
+        return Objects.equals(this.type, other.type) &&
+                Objects.equals(this.name, other.name);
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;
