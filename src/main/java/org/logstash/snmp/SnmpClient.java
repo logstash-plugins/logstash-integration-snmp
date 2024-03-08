@@ -114,7 +114,7 @@ public class SnmpClient implements Closeable {
     ) throws IOException {
         final int engineBootCount = 0;
         final USM usm = createUsm(usmUsers, localEngineId, engineBootCount);
-        final Snmp snmp = new Snmp(createMessageDispatcher(localEngineId, usm, engineBootCount, threadPoolName, threadPoolSize));
+        final Snmp snmp = new Snmp(createMessageDispatcher(usm, engineBootCount, threadPoolName, threadPoolSize));
 
         for (final String protocol : protocols) {
             snmp.addTransportMapping(createTransport(parseAddress(protocol, host, port)));
@@ -124,18 +124,16 @@ public class SnmpClient implements Closeable {
     }
 
     private static USM createUsm(List<UsmUser> usmUsers, OctetString localEngineID, int engineBootCount) {
-        if (usmUsers == null || usmUsers.isEmpty()) {
-            return null;
-        }
-
         final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
-        usmUsers.forEach(usm::addUser);
+
+        if (usmUsers != null) {
+            usmUsers.forEach(usm::addUser);
+        }
 
         return usm;
     }
 
     private static MessageDispatcher createMessageDispatcher(
-            OctetString localEngineId,
             USM usm,
             int engineBootCount,
             String threadPoolName,
@@ -147,7 +145,7 @@ public class SnmpClient implements Closeable {
         dispatcher.addMessageProcessingModel(new MPv1());
         dispatcher.addMessageProcessingModel(new MPv2c());
 
-        final MPv3 mpv3 = usm != null ? new MPv3(usm) : new MPv3(localEngineId.getValue());
+        final MPv3 mpv3 = new MPv3(usm);
         mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
         dispatcher.addMessageProcessingModel(mpv3);
 
