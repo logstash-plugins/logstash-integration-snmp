@@ -3,6 +3,7 @@ package org.logstash.snmp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.logstash.snmp.mib.MibManager;
+import org.logstash.snmp.trap.SnmpTrapMessage;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.MessageDispatcherImpl;
@@ -59,6 +60,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 
 import static java.util.Objects.nonNull;
 import static org.logstash.snmp.SnmpUtils.parseSecurityLevel;
@@ -70,6 +73,7 @@ public class SnmpClient implements Closeable {
     private final Snmp snmp;
     private final OctetString contextEngineId;
     private final OctetString contextName;
+    private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
@@ -154,6 +158,85 @@ public class SnmpClient implements Closeable {
 
     public void listen() throws IOException {
         getSnmp().listen();
+    }
+
+    public void trap(String[] allowedSecurityNames, Consumer<SnmpTrapMessage> consumer) throws IOException {
+        doTrap(allowedSecurityNames, consumer, stopCountDownLatch);
+    }
+
+    void doTrap(String[] allowedSecurityNames, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
+        final Set<String> allowedSecurityNamesSet = Set.of(allowedSecurityNames);
+
+        getSnmp().addCommandResponder(event -> {
+            logger.debug("SNMP Trap received: {}", event);
+
+            final String securityName = new String(event.getSecurityName());
+            if (!allowedSecurityNamesSet.isEmpty()) {
+                if (!allowedSecurityNamesSet.contains(securityName)) {
+                    logger.debug("Received trap message with unknown security name/community: '{}'. Skipping", securityName);
+                    return;
+                }
+            }
+
+            final Map<String, Object> trapEvent = createTrapEvent(event.getSecurityModel(), securityName, event.getPDU());
+            final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
+            for (VariableBinding binding : event.getPDU().getVariableBindings()) {
+                formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
+            }
+
+            final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
+                    event.getSecurityModel(),
+                    event.getSecurityName(),
+                    event.getPeerAddress(),
+                    trapEvent,
+                    formattedVarBindings);
+
+            consumer.accept(trapMessage);
+        });
+
+        getSnmp().listen();
+
+        logger.info("SNMP trap receiver started.");
+
+        try {
+            stopCountDownLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private Map<String, Object> createTrapEvent(int securityModel, final String securityName, PDU pdu) {
+        final HashMap<String, Object> trapEvent = new HashMap<>();
+        trapEvent.put("version", securityModel);
+        trapEvent.put("type", PDU.getTypeString(pdu.getType()));
+
+        if (securityModel == SnmpConstants.version2c || securityModel == SnmpConstants.version3) {
+            final int requestId = nonNull(pdu.getRequestID()) ? pdu.getRequestID().getValue() : 0;
+            trapEvent.put("request_id", requestId);
+            trapEvent.put("error_status", pdu.getErrorStatus());
+            trapEvent.put("error_status_text", pdu.getErrorStatusText());
+            trapEvent.put("error_index", pdu.getErrorIndex());
+        } else if (pdu instanceof PDUv1) {
+            final PDUv1 pdUv1 = (PDUv1) pdu;
+            trapEvent.put("enterprise", pdUv1.getEnterprise().toString());
+            trapEvent.put("agent_addr", pdUv1.getAgentAddress().toString());
+            trapEvent.put("generic_trap", pdUv1.getGenericTrap());
+            trapEvent.put("specific_trap", pdUv1.getSpecificTrap());
+            trapEvent.put("timestamp", pdUv1.getTimestamp());
+        }
+
+        if (securityModel == SnmpConstants.version1 || securityModel == SnmpConstants.version2c) {
+            trapEvent.put("community", securityName);
+        }
+
+        final Map<String, Object> coercedVarBindings = new HashMap<>(pdu.getVariableBindings().size());
+        for (VariableBinding binding : pdu.getVariableBindings()) {
+            coercedVarBindings.put(binding.getOid().toString(), coerceVariable(binding.getVariable()));
+        }
+
+        trapEvent.put("variable_bindings", coercedVarBindings);
+
+        return trapEvent;
     }
 
     public Map<String, Object> get(Target target, OID[] oids) throws IOException {
@@ -416,6 +499,8 @@ public class SnmpClient implements Closeable {
             snmp.close();
         } catch (Exception e) {
             logger.error("Error closing SNMP client", e);
+        } finally {
+            stopCountDownLatch.countDown();
         }
     }
 
