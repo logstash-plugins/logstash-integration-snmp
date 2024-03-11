@@ -27,22 +27,34 @@ Read SNMP trap messages as events
 
 Resulting `message` field resembles:
 [source,ruby]
-  #<SNMP::SNMPv1_Trap:0x6f1a7a4 @varbind_list=[#<SNMP::VarBind:0x2d7bcd8f @value="teststring",
-  @name=[1.11.12.13.14.15]>], @timestamp=#<SNMP::TimeTicks:0x1af47e9d @value=55>, @generic_trap=6,
-  @enterprise=[1.2.3.4.5.6], @source_ip="127.0.0.1", @agent_addr=#<SNMP::IpAddress:0x29a4833e @value="\xC0\xC1\xC2\xC3">,
-  @specific_trap=99>
+{"agent_addr"=>"192.168.1.40", "generic_trap"=>6, "specific_trap"=>15511, "enterprise"=>"1.3.6.1.2.1.1.1", "variable_bindings"=>{"1.3.6.1.2.1.1.2.0"=>"test one", "1.3.6.1.2.1.1.1.0"=>"test two"}, "type"=>"V1TRAP", "community"=>"public", "version"=>1, "timestamp"=>1500}
 
 
 [id="plugins-{type}s-{plugin}-ecs"]
-==== Compatibility with the Elastic Common Schema (ECS)
+==== Event Metadata and the Elastic Common Schema (ECS)
 
-Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>>.
-The source host field changes based on <<plugins-{type}s-{plugin}-ecs_compatibility>>.
+When ECS <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled, this plugin adds SNMP trap metadata to each event. The value is stored in the @metadata where it can be used by other plugins in your pipeline.
+
+Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>> field.
 
 [cols="<l,<l,e,<e"]
 |=======================================================================
-|ECS disabled |ECS v1, v8    |Description
-|[host]       |[host][ip]    |IP address of the host e.g. "192.168.1.11"
+|ECS disabled |ECS v1, v8    |Availability|Description
+|[host]|[host][ip]|Always|IP address of the host e.g. "192.168.1.11"
+| -|[@metadata][input][snmptrap][pdu][agent_addr]|`SNMPv1`|Network address of the object generating the trap
+| -|[@metadata][input][snmptrap][pdu][community]|`SNMPv1` `SNMPv2c`|SNMP community
+| -|[@metadata][input][snmptrap][pdu][enterprise]|`SNMPv1`|Type of object generating the trap
+| -|[@metadata][input][snmptrap][pdu][error_index]|`SNMPv2c` `SNMPv3`|Provides additional information by identifying
+which variable binding in the list caused the error
+| -|[@metadata][input][snmptrap][pdu][error_status]|`SNMPv2c` `SNMPv3`|Error status code
+| -|[@metadata][input][snmptrap][pdu][error_status_text]|`SNMPv2c` `SNMPv3`|Error status code description
+| -|[@metadata][input][snmptrap][pdu][generic_trap]|`SNMPv1`|Generic trap type
+| -|[@metadata][input][snmptrap][pdu][request_id]|`SNMPv2c` `SNMPv3`|Request ID
+| -|[@metadata][input][snmptrap][pdu][specific_trap]|`SNMPv1`|Specific code, presented even if the generic_trap is not enterprise specific
+| -|[@metadata][input][snmptrap][pdu][timestamp]|`SNMPv1`|Time elapsed between the last (re)initialization of the network entity and the generation of the trap
+| -|[@metadata][input][snmptrap][pdu][type]|Always|PDU type
+| -|[@metadata][input][snmptrap][pdu][variable_bindings]|Always|SNMP variable bindings values
+| -|[@metadata][input][snmptrap][pdu][version]|Always|Number representing the SNMP version (`0` - SNMPv1, `1` - SNMPv2c, `3` - SNMPv3)
 |=======================================================================
 
 [id="plugins-{type}s-{plugin}-options"]

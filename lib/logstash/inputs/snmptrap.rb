@@ -2,9 +2,8 @@
 require "logstash/inputs/base"
 require "logstash/namespace"
 
-require "snmp"
-require_relative "snmptrap/patches/trap_listener"
-
+require "set"
+require 'logstash-integration-snmp_jars'
 require 'logstash/plugin_mixins/ecs_compatibility_support'
 require 'logstash/plugin_mixins/ecs_compatibility_support/target_check'
 require 'logstash/plugin_mixins/event_support/event_factory_adapter'
@@ -14,15 +13,16 @@ require 'logstash/plugin_mixins/validator_support/field_reference_validation_ada
 #
 # Resulting `@message` looks like :
 # [source,ruby]
-#   #<SNMP::SNMPv1_Trap:0x6f1a7a4 @varbind_list=[#<SNMP::VarBind:0x2d7bcd8f @value="teststring",
-#   @name=[1.11.12.13.14.15]>], @timestamp=#<SNMP::TimeTicks:0x1af47e9d @value=55>, @generic_trap=6,
-#   @enterprise=[1.2.3.4.5.6], @source_ip="127.0.0.1", @agent_addr=#<SNMP::IpAddress:0x29a4833e @value="\xC0\xC1\xC2\xC3">,
-#   @specific_trap=99>
+# {"error_index"=>0, "variable_bindings"=>{}, "error_status"=>0, "type"=>"TRAP","error_status_text"=>"Success", "version"=>3, "request_id"=>395545945}
 #
-
 class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
 
+  java_import 'org.logstash.snmp.SnmpClient'
+  java_import 'org.logstash.snmp.RubySnmpOidFieldMapper'
+  java_import 'org.logstash.snmp.mib.MibManager'
+
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
+
   include LogStash::PluginMixins::ECSCompatibilitySupport::TargetCheck
 
   include LogStash::PluginMixins::EventSupport::EventFactoryAdapter
@@ -49,6 +49,18 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # The target is only relevant while decoding data into a new event.
   config :target, :validate => :field_reference
 
+  BASE_MIB_PATH = ::File.join(__FILE__, "..", "..", "..", "mibs")
+
+  # These MIBs were automatically added by ruby-snmp when no @yamlmibdir was provided.
+  DEFAULT_MIB_PATHS = [
+    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-SMI.dic"),
+    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-MIB.dic"),
+    ::File.join(BASE_MIB_PATH, "ietf", "IF-MIB.dic"),
+    ::File.join(BASE_MIB_PATH, "ietf", "IP-MIB.dic"),
+    ::File.join(BASE_MIB_PATH, "ietf", "TCP-MIB.dic"),
+    ::File.join(BASE_MIB_PATH, "ietf", "UDP-MIB.dic"),
+  ].map { |path| ::File.expand_path(path) }
+
   def initialize(params={})
     super(params)
 
@@ -56,22 +68,29 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end
 
   def register
-    @snmptrap = nil
+    mib_manager = MibManager.new(RubySnmpOidFieldMapper.new)
+
     if @yamlmibdir
-      @logger.info("checking #{@yamlmibdir} for MIBs")
-      Dir["#{@yamlmibdir}/*.yaml"].each do |yamlfile|
-        mib_name = File.basename(yamlfile, ".*")
-        @yaml_mibs ||= []
-        @yaml_mibs << mib_name
+      logger.info("using user provided MIB path #{@yamlmibdir}")
+      mib_manager.add(@yamlmibdir)
+    else
+      logger.info("using default MIB paths #{DEFAULT_MIB_PATHS}")
+      DEFAULT_MIB_PATHS.each do |path|
+        mib_manager.add(path)
       end
-      @logger.info("found MIBs: #{@yaml_mibs.join(',')}") if @yaml_mibs
     end
+
+    @client = org.logstash.snmp.SnmpClient
+              .builder(mib_manager, Set['udp'], @port)
+              .setThreadPoolName('SnmpTrapWorker')
+              .build
+
   end # def register
 
   def run(output_queue)
     begin
-      # snmp trap server
-      snmptrap_listener(output_queue).join
+      trap_message_consumer = lambda { |trap| consume_trap_message(output_queue, trap) }
+      @client.trap(@community, trap_message_consumer)
     rescue => e
       @logger.warn("SNMP Trap listener died", :exception => e, :backtrace => e.backtrace)
       Stud.stoppable_sleep(5) { stop? }
@@ -80,46 +99,52 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end # def run
 
   def stop
-    @snmptrap.exit unless @snmptrap.nil?
-    @snmptrap = nil
+    begin
+      @client.close unless @client.nil?
+    rescue => e
+      logger.warn("error closing SNMP client. Ignoring", :exception => e)
+    end
   end
 
   private
 
-  def build_trap_listener
-    traplistener_opts = {:Port => @port, :Community => @community, :Host => @host}
-    if @yaml_mibs && !@yaml_mibs.empty?
-      traplistener_opts.merge!({:MibDir => @yamlmibdir, :MibModules => @yaml_mibs})
+  def consume_trap_message(output_queue, trap_message)
+    begin
+      output_queue << process_trap_message(trap_message)
+    rescue => e
+      @logger.error("Failed to create event", :exception => e, :backtrace => e.backtrace, :trap_object => trap_message)
     end
-    @logger.info("It's a Trap!", traplistener_opts.dup)
-    SNMP::TrapListener.new(traplistener_opts)
   end
 
-  def snmptrap_listener(output_queue)
-    @snmptrap = build_trap_listener
+  def process_trap_message(trap_message)
+    data = Hash.new
 
-    @snmptrap.on_trap_default do |trap|
-      begin
-        output_queue << process_trap(trap)
-      rescue => e
-        @logger.error("Failed to create event", :exception => e, :backtrace => e.backtrace, :trap_object => trap)
+    trap_message.getFormattedVariableBindings.each do |name, value|
+      data[name] = value
+    end
+
+    event = targeted_event_factory.new_event(data)
+    event.set(@host_ip_field, trap_message.getPeerIpAddress)
+    event.set('message', format_trap_message(trap_message))
+
+    add_metadata_fields(event, trap_message.getTrapEvent)
+    decorate(event)
+
+    event
+  end
+
+  def format_trap_message(trap_message)
+    trap_event = trap_message.getTrapEvent.to_hash
+    trap_event['variable_bindings'] = trap_event['variable_bindings'].to_hash
+    trap_event.inspect
+  end
+
+  def add_metadata_fields(event, trap_event)
+    if ecs_compatibility != :disabled
+      trap_event.each do |name, value|
+        event.set("[@metadata][input][snmptrap][pdu][#{name}]", value) if value
       end
     end
-    @snmptrap
-  end # def snmptrap_listener
-
-  def process_trap(trap)
-    @logger.debug? && @logger.debug("SNMP Trap received: ", :trap_object => trap.inspect)
-
-    data = Hash.new
-    trap.each_varbind do |vb|
-      data[vb.name.to_s] = vb.value.to_s
-    end
-    event = targeted_event_factory.new_event(data)
-    event.set(@host_ip_field, trap.source_ip) if trap.source_ip
-    event.set('message', trap.inspect)
-    decorate(event)
-    event
   end
 
 end # class LogStash::Inputs::Snmptrap
