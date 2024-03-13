@@ -1,15 +1,15 @@
 # encoding: utf-8
-require "logstash/inputs/base"
-require "logstash/namespace"
-require "stud/interval"
-require "socket" # for Socket.gethostname
-require "set"
+require 'logstash/inputs/base'
+require 'logstash/namespace'
+require 'stud/interval'
+require 'set'
 
-require "logstash-integration-snmp_jars"
+require 'logstash-integration-snmp_jars'
 require 'logstash/plugin_mixins/ecs_compatibility_support'
 require 'logstash/plugin_mixins/ecs_compatibility_support/target_check'
 require 'logstash/plugin_mixins/event_support/event_factory_adapter'
 require 'logstash/plugin_mixins/validator_support/field_reference_validation_adapter'
+require 'logstash/plugin_mixins/snmp/common'
 
 # Generate a repeating message.
 #
@@ -18,8 +18,6 @@ require 'logstash/plugin_mixins/validator_support/field_reference_validation_ada
 class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   java_import 'org.logstash.snmp.SnmpClient'
-  java_import 'org.logstash.snmp.DefaultOidFieldMapper'
-  java_import 'org.logstash.snmp.mib.MibManager'
   java_import 'org.snmp4j.smi.OID'
 
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
@@ -28,6 +26,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   include LogStash::PluginMixins::EventSupport::EventFactoryAdapter
 
   extend LogStash::PluginMixins::ValidatorSupport::FieldReferenceValidationAdapter
+
+  include LogStash::PluginMixins::Snmp::Common
 
   config_name "snmp"
 
@@ -51,33 +51,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   #  `retries` with a default value of `2`
   #  `timeout` in milliseconds with a default value of `1000`
   config :hosts, :validate => :array  #[ {"host" => "udp:127.0.0.1/161", "community" => "public"} ]
-
-  # This plugin provides sets of MIBs publicly available. The full paths to these provided MIBs paths
-  # Will be displayed at plugin startup.
-  config :use_provided_mibs, :validate => :boolean, :default => true
-
-  # List of paths of MIB .dic files of dirs. If a dir path is specified, all files with .dic extension will be loaded.
-  #
-  # ATTENTION: a MIB .dic file must be generated using the libsmi library `smidump` command line utility
-  # like this for example. Here the `RFC1213-MIB.txt` file is an ASN.1 MIB file.
-  #
-  # `$ smidump -k -f python RFC1213-MIB.txt > RFC1213-MIB.dic`
-  #
-  # The OSS libsmi library https://www.ibr.cs.tu-bs.de/projects/libsmi/ is available & installable
-  # on most OS.
-  config :mib_paths, :validate => :array # ["path/to/mib.dic", "path/to/mib/dir"]
-
-  # number of OID root digits to ignore in event field name. For example, in a numeric OID
-  # like 1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting oid_root_skip => 5
-  # which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
-  # as "1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
-  config :oid_root_skip, :validate => :number, :default => 0
-
-  # number of OID tail digits to retain in event field name. For example, in a numeric OID
-  # like 1.3.6.1.2.1.1.1.0" the last 2 digits could be retained by setting oid_path_length => 2
-  # which would result in a field name "1.0". Similarly, when a MIB is used an OID such as
-  # "1.3.6.1.2.mib-2.system.sysDescr.0" would become "sysDescr.0"
-  config :oid_path_length, :validate => :number, :default => 0
 
   # Set polling interval in seconds
   #
@@ -108,14 +81,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # The SNMPv3 security level can be Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Privacy
   config :security_level, :validate => ["noAuthNoPriv", "authNoPriv", "authPriv"]
 
-  # Defines a target field for placing fields.
-  # If this setting is omitted, data gets stored at the root (top level) of the event.
-  # The target is only relevant while decoding data into a new event.
-  config :target, :validate => :field_reference
-
-  BASE_MIB_PATH = ::File.join(__FILE__, "..", "..", "..", "mibs")
-  PROVIDED_MIB_PATHS = [::File.join(BASE_MIB_PATH, "logstash"), ::File.join(BASE_MIB_PATH, "ietf")].map { |path| ::File.expand_path(path) }
-
   def initialize(params={})
     super(params)
 
@@ -135,21 +100,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     validate_oids!
     validate_hosts!
     validate_tables!
-    validate_strip!
 
-    mib_manager = MibManager.new(DefaultOidFieldMapper.new(@oid_root_skip, @oid_path_length))
-
-    if @use_provided_mibs
-      PROVIDED_MIB_PATHS.each do |path|
-        logger.info("using plugin provided MIB path #{path}")
-        mib_manager.add(path)
-      end
-    end
-
-    Array(@mib_paths).each do |path|
-      logger.info("using user provided MIB path #{path}")
-      mib_manager.add(path)
-    end
+    mib_manager = build_mib_manager!
 
     # setup client definitions per provided host
     @client_definitions = []
@@ -292,10 +244,12 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   def close
+    return if @client.nil?
+
     begin
       @client.close
     rescue => e
-        logger.warn("error closing client. Ignoring", :exception => e)
+      logger.warn("Error closing client. Ignoring", :exception => e)
     end
   end
 
@@ -370,10 +324,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         raise(LogStash::ConfigurationError, "each table definition must have a \"name\" option") if !table_entry.is_a?(Hash) || table_entry["name"].nil?
       end
     end
-  end
-
-  def validate_strip!
-    raise(LogStash::ConfigurationError, "you can not specify both oid_root_skip and oid_path_length") if @oid_root_skip > 0 and @oid_path_length > 0
   end
 
   def build_client!(mib_manager, client_protocols)

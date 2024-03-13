@@ -1,13 +1,15 @@
 # encoding: utf-8
-require "logstash/inputs/base"
-require "logstash/namespace"
+require 'logstash/inputs/base'
+require 'logstash/namespace'
+require 'set'
 
-require "set"
 require 'logstash-integration-snmp_jars'
 require 'logstash/plugin_mixins/ecs_compatibility_support'
 require 'logstash/plugin_mixins/ecs_compatibility_support/target_check'
 require 'logstash/plugin_mixins/event_support/event_factory_adapter'
 require 'logstash/plugin_mixins/validator_support/field_reference_validation_adapter'
+require 'logstash/plugin_mixins/normalize_config_support'
+require 'logstash/plugin_mixins/snmp/common'
 
 # Read snmp trap messages as events
 #
@@ -18,8 +20,6 @@ require 'logstash/plugin_mixins/validator_support/field_reference_validation_ada
 class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
 
   java_import 'org.logstash.snmp.SnmpClient'
-  java_import 'org.logstash.snmp.RubySnmpOidFieldMapper'
-  java_import 'org.logstash.snmp.mib.MibManager'
 
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
 
@@ -28,6 +28,10 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   include LogStash::PluginMixins::EventSupport::EventFactoryAdapter
 
   extend LogStash::PluginMixins::ValidatorSupport::FieldReferenceValidationAdapter
+
+  include LogStash::PluginMixins::NormalizeConfigSupport
+
+  include LogStash::PluginMixins::Snmp::Common
 
   config_name "snmptrap"
 
@@ -42,49 +46,36 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   config :community, :validate => :array, :default => "public"
 
   # directory of YAML MIB maps  (same format ruby-snmp uses)
-  config :yamlmibdir, :validate => :string
-
-  # Defines a target field for placing fields.
-  # If this setting is omitted, data gets stored at the root (top level) of the event.
-  # The target is only relevant while decoding data into a new event.
-  config :target, :validate => :field_reference
-
-  BASE_MIB_PATH = ::File.join(__FILE__, "..", "..", "..", "mibs")
+  config :yamlmibdir, :validate => :string, :deprecated => "Use `mib_paths` instead."
 
   # These MIBs were automatically added by ruby-snmp when no @yamlmibdir was provided.
-  DEFAULT_MIB_PATHS = [
-    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-SMI.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "IF-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "IP-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "TCP-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "UDP-MIB.dic"),
+  MIB_DEFAULT_PATHS = [
+    ::File.join(MIB_BASE_PATH, "ietf", "SNMPv2-SMI.dic"),
+    ::File.join(MIB_BASE_PATH, "ietf", "SNMPv2-MIB.dic"),
+    ::File.join(MIB_BASE_PATH, "ietf", "IF-MIB.dic"),
+    ::File.join(MIB_BASE_PATH, "ietf", "IP-MIB.dic"),
+    ::File.join(MIB_BASE_PATH, "ietf", "TCP-MIB.dic"),
+    ::File.join(MIB_BASE_PATH, "ietf", "UDP-MIB.dic"),
   ].map { |path| ::File.expand_path(path) }
 
   def initialize(params={})
     super(params)
 
+    setup_deprecated_params!
     @host_ip_field = ecs_select[disabled: 'host', v1: '[host][ip]']
   end
 
   def register
-    mib_manager = MibManager.new(RubySnmpOidFieldMapper.new)
+    mib_manager = build_mib_manager!
 
-    if @yamlmibdir
-      logger.info("using user provided MIB path #{@yamlmibdir}")
-      mib_manager.add(@yamlmibdir)
-    else
-      logger.info("using default MIB paths #{DEFAULT_MIB_PATHS}")
-      DEFAULT_MIB_PATHS.each do |path|
+    if !@mib_paths && !@use_provided_mibs
+      logger.info("Using default MIB paths #{MIB_DEFAULT_PATHS}")
+      MIB_DEFAULT_PATHS.each do |path|
         mib_manager.add(path)
       end
     end
 
-    @client = org.logstash.snmp.SnmpClient
-              .builder(mib_manager, Set['udp'], @port)
-              .setThreadPoolName('SnmpTrapWorker')
-              .build
-
+    @client = build_client!(mib_manager)
   end # def register
 
   def run(output_queue)
@@ -99,14 +90,23 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end # def run
 
   def stop
+    return if @client.nil?
+
     begin
-      @client.close unless @client.nil?
+      @client.close
     rescue => e
-      logger.warn("error closing SNMP client. Ignoring", :exception => e)
+      logger.warn("Error closing SNMP client. Ignoring", :exception => e)
     end
   end
 
   private
+
+  def build_client!(mib_manager)
+    org.logstash.snmp.SnmpClient
+      .builder(mib_manager, Set['udp'], @port)
+      .setThreadPoolName('SnmpTrapWorker')
+      .build
+  end
 
   def consume_trap_message(output_queue, trap_message)
     begin
@@ -147,4 +147,11 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     end
   end
 
+  def setup_deprecated_params!
+    @mib_paths = normalize_config(:mib_paths) do |normalize|
+      normalize.with_deprecated_mapping(:yamlmibdir) do |yamlmibdir|
+        [yamlmibdir]
+      end
+    end
+  end
 end # class LogStash::Inputs::Snmptrap
