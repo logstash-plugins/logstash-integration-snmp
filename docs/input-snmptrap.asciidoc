@@ -69,6 +69,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-port>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-protocols>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|No
 |=======================================================================
@@ -115,6 +116,14 @@ The address to listen on
 
 The port to listen on. Remember that ports less than 1024 (privileged
 ports) may require root to use. hence the default of 1062.
+
+[id="plugins-{type}s-{plugin}-protocols"]
+===== `protocols`
+  * Value type is <<string,string>>
+  * Allowed values are: `tcp`, `udp`
+  * Default value is `["udp"]`
+
+The transport protocols to listen on.
 
 [id="plugins-{type}s-{plugin}-target"]
 ===== `target`
