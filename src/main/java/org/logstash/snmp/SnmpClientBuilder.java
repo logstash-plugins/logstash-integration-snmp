@@ -21,7 +21,7 @@ public final class SnmpClientBuilder {
     private final Set<String> protocols;
     private String host = "0.0.0.0";
     private final List<UsmUser> usmUsers = new ArrayList<>();
-    private int threadPoolSize = 1;
+    private int threadPoolSize = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private String threadPoolName = "SnmpWorker";
     private OctetString contextEngineId;
     private OctetString contextName;

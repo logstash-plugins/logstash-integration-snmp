@@ -292,6 +292,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   def close
+    return if @client.nil?
+
     begin
       @client.close
     rescue => e
