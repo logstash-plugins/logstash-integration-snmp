@@ -3,10 +3,9 @@ require "logstash/inputs/base"
 require "logstash/namespace"
 require "stud/interval"
 require "socket" # for Socket.gethostname
-require_relative "snmp/client"
-require_relative "snmp/clientv3"
-require_relative "snmp/mib"
+require "set"
 
+require "logstash-integration-snmp_jars"
 require 'logstash/plugin_mixins/ecs_compatibility_support'
 require 'logstash/plugin_mixins/ecs_compatibility_support/target_check'
 require 'logstash/plugin_mixins/event_support/event_factory_adapter'
@@ -17,6 +16,11 @@ require 'logstash/plugin_mixins/validator_support/field_reference_validation_ada
 # This plugin is intented only as an example.
 
 class LogStash::Inputs::Snmp < LogStash::Inputs::Base
+
+  java_import 'org.logstash.snmp.SnmpClient'
+  java_import 'org.logstash.snmp.DefaultOidFieldMapper'
+  java_import 'org.logstash.snmp.mib.MibManager'
+  java_import 'org.snmp4j.smi.OID'
 
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
   include LogStash::PluginMixins::ECSCompatibilitySupport::TargetCheck
@@ -133,23 +137,24 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     validate_tables!
     validate_strip!
 
-    mib = LogStash::SnmpMib.new
+    mib_manager = MibManager.new(DefaultOidFieldMapper.new(@oid_root_skip, @oid_path_length))
 
     if @use_provided_mibs
       PROVIDED_MIB_PATHS.each do |path|
         logger.info("using plugin provided MIB path #{path}")
-        mib.add_mib_path(path)
+        mib_manager.add(path)
       end
     end
 
     Array(@mib_paths).each do |path|
       logger.info("using user provided MIB path #{path}")
-      mib.add_mib_path(path)
+      mib_manager.add(path)
     end
 
     # setup client definitions per provided host
-
     @client_definitions = []
+    client_protocols = Set.new
+
     @hosts.each do |host|
       host_name = host["host"]
       community = host["community"] || "public"
@@ -168,29 +173,37 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       address = host_details[:host_address]
       port = host_details[:host_port]
 
+      if version == "3"
+        validate_v3_user!
+      end
+
       definition = {
         :get => Array(get),
         :walk => Array(walk),
 
-        :host_protocol => protocol,
+        :host => host_name,
         :host_address => address,
+        :host_protocol => protocol,
         :host_port => port,
         :host_community => community,
+
+        :retries => retries,
+        :timeout => timeout,
+        :version => version,
+
+        :security_name => @security_name,
+        :security_level => @security_level,
       }
 
-      if version == "3"
-        validate_v3_user! # don't really care if verified for every host
-        auth_pass = @auth_pass.nil? ? nil : @auth_pass.value
-        priv_pass = @priv_pass.nil? ? nil : @priv_pass.value
-        definition[:client] = LogStash::SnmpClientV3.new(protocol, address, port, retries, timeout, mib, @security_name, @auth_protocol, auth_pass, @priv_protocol, priv_pass, @security_level)
-      else
-        definition[:client] = LogStash::SnmpClient.new(protocol, address, port, community, version, retries, timeout, mib)
-      end
+      client_protocols << protocol
       @client_definitions << definition
     end
+
+    @client = build_client!(mib_manager, client_protocols)
   end
 
   def run(queue)
+    @client.listen
     # for now a naive single threaded poller which sleeps off the remaining interval between
     # each run. each run polls all the defined hosts for the get, table and walk options.
     stoppable_interval_runner.every(@interval, "polling hosts") do
@@ -200,15 +213,24 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   def poll_clients(queue)
     @client_definitions.each do |definition|
-      client = definition[:client]
       host = definition[:host_address]
+      target = @client.create_target(
+        definition[:host],
+        definition[:version],
+        definition[:retries],
+        definition[:timeout],
+        definition[:host_community],
+        definition[:security_name],
+        definition[:security_level],
+      )
+
       result = {}
 
       if !definition[:get].empty?
         oids = definition[:get]
         begin
-          data = client.get(oids, @oid_root_skip, @oid_path_length)
-          if data
+          data = @client.get(target, oids.map { |oid| OID.new(oid) })
+          if data&.any?
             result.update(data)
           else
             logger.debug? && logger.debug("get operation returned no response", host: host, oids: oids)
@@ -221,8 +243,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       if !definition[:walk].empty?
         definition[:walk].each do |oid|
           begin
-            data = client.walk(oid, @oid_root_skip, @oid_path_length)
-            if data
+            data = @client.walk(target, OID.new(oid))
+            if data&.any?
               result.update(data)
             else
               logger.debug? && logger.debug("walk operation returned no response", host: host, oid: oid)
@@ -236,8 +258,10 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       if !Array(@tables).empty?
         @tables.each do |table_entry|
           begin
-            data = client.table(table_entry, @oid_root_skip, @oid_path_length)
-            if data
+            table_name = table_entry['name']
+            oids = table_entry["columns"].map { |oid| OID.new(oid) }
+            data = @client.table(target, table_name, oids)
+            if data&.any?
               result.update(data)
             else
               logger.debug? && logger.debug("table operation returned no response", host: host, table: table_entry)
@@ -268,12 +292,12 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   def close
-    @client_definitions.each do |definition|
-      begin
-        definition[:client].close
-      rescue => e
-        logger.warn("error closing client on #{definition[:host_address]}, ignoring", :exception => e)
-      end
+    return if @client.nil?
+
+    begin
+      @client.close
+    rescue => e
+        logger.warn("error closing client. Ignoring", :exception => e)
     end
   end
 
@@ -352,6 +376,14 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   def validate_strip!
     raise(LogStash::ConfigurationError, "you can not specify both oid_root_skip and oid_path_length") if @oid_root_skip > 0 and @oid_path_length > 0
+  end
+
+  def build_client!(mib_manager, client_protocols)
+    client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, client_protocols)
+    unless @security_name.nil?
+      client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
+    end
+    client_builder.build
   end
 
   ##

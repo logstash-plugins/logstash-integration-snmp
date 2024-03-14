@@ -1,0 +1,7 @@
+MIB = {
+    "moduleName" : "DUMMY",
+    "logstash" : {
+        "nodetype" : "module",
+        "language" : "SMIv2",
+    }
+}
