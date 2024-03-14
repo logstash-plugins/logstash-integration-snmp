@@ -9,7 +9,8 @@ apply plugin: 'maven-publish'
 group "org.logstash.integrations"
 version "${new File("VERSION").text.trim()}"
 
-def SNMP4J_VERSION = '2.8.4'
+String snmp4jVersion = '2.8.4'
+String snakeyamlVersion = '2.7'
 String junitVersion = '5.9.2'
 String log4jVersion = '2.17.0'
 String jacksonVersion = '2.15.3'
@@ -30,8 +31,8 @@ repositories {
 }
 
 dependencies {
-    implementation "org.snmp4j:snmp4j:${SNMP4J_VERSION}"
-    implementation group: 'org.yaml', name: 'snakeyaml', version: '2.0'
+    implementation "org.snmp4j:snmp4j:${snmp4jVersion}"
+    implementation "org.snakeyaml:snakeyaml-engine:${snakeyamlVersion}"
 
     // provided by Logstash
     compileOnly "org.apache.logging.log4j:log4j-api:${log4jVersion}"
