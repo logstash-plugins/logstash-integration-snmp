@@ -12,8 +12,8 @@ module LogStash
         OID_MAPPING_FORMAT_DEFAULT = 'default'.freeze
         OID_MAPPING_FORMAT_RUBY_SNMP = 'ruby_snmp'.freeze
 
-        MIB_BASE_PATH = ::File.join(__FILE__, "..", "..", "..", "..", "mibs")
-        MIB_PROVIDED_PATHS = [::File.join(MIB_BASE_PATH, "logstash"), ::File.join(MIB_BASE_PATH, "ietf")].map { |path| ::File.expand_path(path) }
+        MIB_BASE_PATH = ::File.join(__FILE__, '..', '..', '..', '..', 'mibs')
+        MIB_PROVIDED_PATHS = [::File.join(MIB_BASE_PATH, 'logstash'), ::File.join(MIB_BASE_PATH, 'ietf')].map { |path| ::File.expand_path(path) }
 
         def self.included(base)
           # Common configuration supported by all SNMP plugins
@@ -79,11 +79,9 @@ module LogStash
         def build_mib_manager!
           mib_manager = new_mib_manager
 
-          if @mib_paths
-            @mib_paths.each do |path|
-              logger.info("Using user provided MIB path #{path}")
-              mib_manager.add(path)
-            end
+          @mib_paths&.each do |path|
+            logger.info("Using user provided MIB path #{path}")
+            mib_manager.add(path)
           end
 
           if @use_provided_mibs
@@ -116,9 +114,9 @@ module LogStash
 
         def validate_oid_field_mapper_params!
           if @oid_mapping_format == 'default'
-            raise LogStash::ConfigurationError, "Use either `oid_root_skip` or `oid_path_length`" if @oid_root_skip > 0 and @oid_path_length > 0
+            raise(LogStash::ConfigurationError, 'Use either `oid_root_skip` or `oid_path_length`') if @oid_root_skip.positive? && @oid_path_length.positive?
           else
-            raise LogStash::ConfigurationError, "The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`" if @oid_root_skip > 0 || @oid_path_length > 0
+            raise(LogStash::ConfigurationError, 'The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`') if @oid_root_skip.positive? || @oid_path_length.positive?
           end
         end
 
