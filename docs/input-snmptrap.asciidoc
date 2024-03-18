@@ -137,6 +137,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-oid_root_skip>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-port>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-protocols>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-use_provided_mibs>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|__Deprecated__
@@ -241,6 +242,14 @@ NOTE: This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_fo
 
 The port to listen on. Remember that ports less than 1024 (privileged
 ports) may require root to use. hence the default of 1062.
+
+[id="plugins-{type}s-{plugin}-protocols"]
+===== `protocols`
+  * Value type is <<string,string>>
+  * Allowed values are: `tcp`, `udp`
+  * Default value is `["udp"]`
+
+The transport protocols to listen on.
 
 [id="plugins-{type}s-{plugin}-target"]
 ===== `target`

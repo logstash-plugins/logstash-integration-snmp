@@ -42,6 +42,9 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # ports) may require root to use. hence the default of 1062.
   config :port, :validate => :number, :default => 1062
 
+  # The protocols to listen on.
+  config :protocols, :validate => %w[tcp udp], :default => %w[udp], :list => true
+
   # SNMP Community String to listen for.
   config :community, :validate => :array, :default => "public"
 
@@ -103,7 +106,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
 
   def build_client!(mib_manager)
     org.logstash.snmp.SnmpClient
-      .builder(mib_manager, Set['udp'], @port)
+      .builder(mib_manager, @protocols.to_set, @port)
       .setThreadPoolName('SnmpTrapWorker')
       .build
   end
