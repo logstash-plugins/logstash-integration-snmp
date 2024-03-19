@@ -71,8 +71,6 @@ public class SnmpClient implements Closeable {
     private static final Logger logger = LogManager.getLogger(SnmpClient.class);
     private final MibManager mib;
     private final Snmp snmp;
-    private final OctetString contextEngineId;
-    private final OctetString contextName;
     private final Set<Integer> supportedVersions;
     private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
 
@@ -93,13 +91,9 @@ public class SnmpClient implements Closeable {
             String threadPoolName,
             int threadPoolSize,
             List<UsmUser> users,
-            OctetString localEngineId,
-            OctetString contextEngineId,
-            OctetString contextName
+            OctetString localEngineId
     ) throws IOException {
         this.mib = mib;
-        this.contextEngineId = contextEngineId;
-        this.contextName = contextName;
         this.supportedVersions = supportedVersions;
 
         // global security models/protocols
@@ -196,28 +190,28 @@ public class SnmpClient implements Closeable {
         doTrap(allowedSecurityNames, consumer, stopCountDownLatch);
     }
 
-    void doTrap(String[] allowedSecurityNames, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
-        final Set<String> allowedSecurityNamesSet = Set.of(allowedSecurityNames);
+    void doTrap(String[] communities, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
+        final Set<String> allowedCommunities = Set.of(communities);
 
         getSnmp().addCommandResponder(event -> {
             logger.debug("SNMP Trap received: {}", event);
-
+            final int version = event.getMessageProcessingModel();
             final String securityName = new String(event.getSecurityName());
-            if (!allowedSecurityNamesSet.isEmpty()) {
-                if (!allowedSecurityNamesSet.contains(securityName)) {
-                    logger.debug("Received trap message with unknown security name/community: '{}'. Skipping", securityName);
-                    return;
-                }
+
+            // Empty communities means "allow all communities" (BC with ruby-snmp)
+            if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
+                logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
+                return;
             }
 
-            final Map<String, Object> trapEvent = createTrapEvent(event.getSecurityModel(), securityName, event.getPDU());
+            final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
             final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
             for (VariableBinding binding : event.getPDU().getVariableBindings()) {
                 formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
             }
 
             final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
-                    event.getSecurityModel(),
+                    version,
                     event.getSecurityName(),
                     event.getPeerAddress(),
                     trapEvent,
@@ -227,7 +221,6 @@ public class SnmpClient implements Closeable {
         });
 
         getSnmp().listen();
-
         logger.info("SNMP trap receiver started.");
 
         try {
@@ -237,12 +230,12 @@ public class SnmpClient implements Closeable {
         }
     }
 
-    private Map<String, Object> createTrapEvent(int securityModel, final String securityName, PDU pdu) {
+    private Map<String, Object> createTrapEvent(int version, final String securityName, PDU pdu) {
         final HashMap<String, Object> trapEvent = new HashMap<>();
-        trapEvent.put("version", securityModel);
+        trapEvent.put("version", SnmpUtils.parseSnmpVersion(version));
         trapEvent.put("type", PDU.getTypeString(pdu.getType()));
 
-        if (securityModel == SnmpConstants.version2c || securityModel == SnmpConstants.version3) {
+        if (version > SnmpConstants.version1) {
             final int requestId = nonNull(pdu.getRequestID()) ? pdu.getRequestID().getValue() : 0;
             trapEvent.put("request_id", requestId);
             trapEvent.put("error_status", pdu.getErrorStatus());
@@ -257,7 +250,7 @@ public class SnmpClient implements Closeable {
             trapEvent.put("timestamp", pdUv1.getTimestamp());
         }
 
-        if (securityModel == SnmpConstants.version1 || securityModel == SnmpConstants.version2c) {
+        if (version < SnmpConstants.version3) {
             trapEvent.put("community", securityName);
         }
 
@@ -295,7 +288,7 @@ public class SnmpClient implements Closeable {
             throw new SnmpClientException(String.format("timeout sending snmp get request to target %s", target.getAddress()));
         }
 
-        final HashMap<String, Object> result = new HashMap<>();
+        final Map<String, Object> result = new HashMap<>();
         for (VariableBinding binding : responsePdu.getVariableBindings()) {
             final String oid = mib.map(binding.getOid());
             result.put(oid, coerceVariable(binding.getVariable()));
@@ -314,7 +307,7 @@ public class SnmpClient implements Closeable {
             return Collections.emptyMap();
         }
 
-        final HashMap<String, Object> result = new HashMap<>();
+        final Map<String, Object> result = new HashMap<>();
         for (final TreeEvent event : events) {
             if (event == null) {
                 continue;
@@ -379,7 +372,7 @@ public class SnmpClient implements Closeable {
                 continue;
             }
 
-            final HashMap<String, Object> row = new HashMap<>();
+            final Map<String, Object> row = new HashMap<>();
             row.put("index", event.getIndex().toString());
 
             for (final VariableBinding binding : variableBindings) {
@@ -489,13 +482,6 @@ public class SnmpClient implements Closeable {
         final PDU pdu;
         if (target.getVersion() == SnmpConstants.version3) {
             pdu = new ScopedPDU();
-            ScopedPDU scopedPDU = (ScopedPDU) pdu;
-            if (contextEngineId != null) {
-                scopedPDU.setContextEngineID(contextEngineId);
-            }
-            if (contextName != null) {
-                scopedPDU.setContextName(contextName);
-            }
         } else {
             if (pduType == PDU.V1TRAP) {
                 pdu = new PDUv1();
