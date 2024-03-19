@@ -54,7 +54,7 @@ which variable binding in the list caused the error
 | -|[@metadata][input][snmptrap][pdu][timestamp]|`SNMPv1`|Time elapsed between the last (re)initialization of the network entity and the generation of the trap
 | -|[@metadata][input][snmptrap][pdu][type]|Always|PDU type
 | -|[@metadata][input][snmptrap][pdu][variable_bindings]|Always|SNMP variable bindings values
-| -|[@metadata][input][snmptrap][pdu][version]|Always|Number representing the SNMP version (`0` - SNMPv1, `1` - SNMPv2c, `3` - SNMPv3)
+| -|[@metadata][input][snmptrap][pdu][version]|Always|SNMP version
 |=======================================================================
 
 [id="plugins-{type}s-{plugin}-import-mibs"]

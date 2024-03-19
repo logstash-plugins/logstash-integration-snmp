@@ -45,7 +45,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # The supported transport protocols to listen on.
   config :supported_transports, :validate => %w[tcp udp], :default => %w[udp], :required => true, :list => true
 
-  # The support SNMP versions to listen on
+  # The supported SNMP versions to listen on
   config :supported_versions, :validate => %w[1 2c], default: %w[1 2c], :required => true, :list => true
 
   # SNMP Community String to listen for.
