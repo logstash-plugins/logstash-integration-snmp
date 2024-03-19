@@ -38,7 +38,7 @@ class SnmpUtilsTest {
         assertEquals("1", SnmpUtils.parseSnmpVersion(SnmpConstants.version1));
         assertEquals("2c", SnmpUtils.parseSnmpVersion(SnmpConstants.version2c));
         assertEquals("3", SnmpUtils.parseSnmpVersion(SnmpConstants.version3));
-        assertThrows(SnmpClientException.class, () -> SnmpUtils.parseSnmpVersion(4));
+        assertEquals("99", SnmpUtils.parseSnmpVersion(99));
     }
 
     @Test

@@ -345,28 +345,6 @@ class SnmpClientTest {
         }
     }
 
-    @Test
-    void getWithContextEngineIdAndNameShouldProperlyCreateV3Pdu() throws IOException {
-        final OctetString contextEngineId = new OctetString("foo");
-        final OctetString contextName = new OctetString("bar");
-
-        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
-                .setContextEngineId(contextEngineId.toString())
-                .setContextName(contextName.toString())
-                .build()) {
-
-            final ScopedPDU pdu = (ScopedPDU) assertGetPdu(
-                    client,
-                    "3",
-                    ScopedPDU.class,
-                    new OID[]{new OID("1.2"), new OID("1.2.3.4.5")}
-            );
-
-            assertEquals(contextEngineId, pdu.getContextEngineID());
-            assertEquals(contextName, pdu.getContextName());
-        }
-    }
-
     private PDU assertGetPdu(SnmpClient client, String targetVersion, Class<?> expectedPduClass, OID[] expectedBindings) throws IOException {
         final SnmpClient clientSpy = spy(client);
         final Snmp snmp = spy(clientSpy.getSnmp());
@@ -864,13 +842,13 @@ class SnmpClientTest {
                 loggerExt.getAppender().assertNoLogWithFormat(
                         SnmpClient.class,
                         Level.DEBUG,
-                        "Received trap message with unknown security name/community: '{}'. Skipping"
+                        "Received trap message with unknown community: '{}'. Skipping"
                 );
             } else {
                 loggerExt.getAppender().assertLogWithMessage(
                         SnmpClient.class,
                         Level.DEBUG,
-                        String.format("Received trap message with unknown security name/community: '%s'. Skipping", pduCommunity)
+                        String.format("Received trap message with unknown community: '%s'. Skipping", pduCommunity)
                 );
             }
         }
@@ -916,12 +894,12 @@ class SnmpClientTest {
                 .thenReturn("iso.foo", "iso.bar");
 
         final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version1, pdUv1);
-        assertEquals(SnmpConstants.version1, snmpTrapMessage.getSecurityModel());
+        assertEquals(SnmpConstants.version1, snmpTrapMessage.getVersion());
         assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
 
         final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
-        assertEquals(SnmpConstants.version1, trapEvent.remove("version"));
+        assertEquals("1", trapEvent.remove("version"));
         assertEquals(PDU.getTypeString(pdUv1.getType()), trapEvent.remove("type"));
 
         assertEquals(TRAP_SECURITY_NAME, trapEvent.remove("community"));
@@ -962,12 +940,12 @@ class SnmpClientTest {
                 .thenReturn("iso.foo", "iso.bar");
 
         final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version2c, pdu);
-        assertEquals(SnmpConstants.version2c, snmpTrapMessage.getSecurityModel());
+        assertEquals(SnmpConstants.version2c, snmpTrapMessage.getVersion());
         assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
 
         final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
-        assertEquals(SnmpConstants.version2c, trapEvent.remove("version"));
+        assertEquals("2c", trapEvent.remove("version"));
         assertEquals(PDU.getTypeString(pdu.getType()), trapEvent.remove("type"));
         assertEquals(pdu.getRequestID().getValue(), trapEvent.remove("request_id"));
         assertEquals(pdu.getErrorStatus(), trapEvent.remove("error_status"));
@@ -1006,12 +984,12 @@ class SnmpClientTest {
                 .thenReturn("iso.foo", "iso.bar");
 
         final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version3, scopedPDU);
-        assertEquals(SnmpConstants.version3, snmpTrapMessage.getSecurityModel());
+        assertEquals(SnmpConstants.version3, snmpTrapMessage.getVersion());
         assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
 
         final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
-        assertEquals(SnmpConstants.version3, trapEvent.remove("version"));
+        assertEquals("3", trapEvent.remove("version"));
         assertEquals(PDU.getTypeString(scopedPDU.getType()), trapEvent.remove("type"));
         assertEquals(scopedPDU.getRequestID().getValue(), trapEvent.remove("request_id"));
         assertEquals(scopedPDU.getErrorStatus(), trapEvent.remove("error_status"));
@@ -1037,7 +1015,7 @@ class SnmpClientTest {
         assertEquals("bar", formattedVariableBindings.get("iso.bar"));
     }
 
-    private SnmpTrapMessage executeTrapAndGetProducedSnmpTrapMessage(int securityModel, PDU pdu) throws IOException {
+    private SnmpTrapMessage executeTrapAndGetProducedSnmpTrapMessage(int version, PDU pdu) throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
 
@@ -1048,8 +1026,8 @@ class SnmpClientTest {
             client.doTrap(new String[0], p -> message[0] = p, new CountDownLatch(0));
 
             final CommandResponderEvent responderEvent = mock(CommandResponderEvent.class);
-            when(responderEvent.getSecurityModel())
-                    .thenReturn(securityModel);
+            when(responderEvent.getMessageProcessingModel())
+                    .thenReturn(version);
 
             when(responderEvent.getPeerAddress())
                     .thenReturn(TRAP_PEER_ADDRESS);

@@ -52,7 +52,7 @@ final class SnmpUtils {
             case SnmpConstants.version3:
                 return "3";
             default:
-                throw new SnmpClientException(String.format("version %d is not supported", version));
+                return String.valueOf(version);
         }
     }
 

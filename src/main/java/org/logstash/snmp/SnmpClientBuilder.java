@@ -27,8 +27,6 @@ public final class SnmpClientBuilder {
     private final List<UsmUser> usmUsers = new ArrayList<>();
     private int threadPoolSize = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private String threadPoolName = "SnmpWorker";
-    private OctetString contextEngineId;
-    private OctetString contextName;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -74,16 +72,6 @@ public final class SnmpClientBuilder {
         return this;
     }
 
-    public SnmpClientBuilder setContextEngineId(final String contextEngineId) {
-        this.contextEngineId = new OctetString(contextEngineId);
-        return this;
-    }
-
-    public SnmpClientBuilder setContextName(final String contextName) {
-        this.contextName = new OctetString(contextName);
-        return this;
-    }
-
     public SnmpClientBuilder setSupportedVersions(final Set<String> supportedVersions) {
         final Set<Integer> versions = supportedVersions
                 .stream()
@@ -108,9 +96,7 @@ public final class SnmpClientBuilder {
                 threadPoolName,
                 threadPoolSize,
                 usmUsers,
-                localEngineId,
-                contextEngineId,
-                contextName
+                localEngineId
         );
     }
 }

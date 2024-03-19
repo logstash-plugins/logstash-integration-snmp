@@ -6,28 +6,28 @@ import org.snmp4j.smi.TransportIpAddress;
 import java.util.Map;
 
 public class SnmpTrapMessage {
-    private final int securityModel;
+    private final int version;
     private final byte[] securityName;
     private final Address peerAddress;
     private final Map<String, Object> trapEvent;
     private final Map<String, Object> formattedVariableBindings;
 
     public SnmpTrapMessage(
-            int securityModel,
+            int version,
             byte[] securityName,
             Address peerAddress,
             Map<String, Object> trapEvent,
             Map<String, Object> formattedVariableBindings
     ) {
-        this.securityModel = securityModel;
+        this.version = version;
         this.securityName = securityName;
         this.peerAddress = peerAddress;
         this.trapEvent = trapEvent;
         this.formattedVariableBindings = formattedVariableBindings;
     }
 
-    public int getSecurityModel() {
-        return securityModel;
+    public int getVersion() {
+        return version;
     }
 
     public String getSecurityNameString() {
