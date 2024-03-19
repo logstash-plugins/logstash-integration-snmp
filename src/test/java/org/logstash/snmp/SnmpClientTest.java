@@ -68,6 +68,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -101,12 +102,59 @@ class SnmpClientTest {
     LoggerAppenderExtension loggerExt = new LoggerAppenderExtension(LogManager.getLogger(SnmpClient.class));
 
     @Test
-    void shouldAddSnmpMessageDispatcherProcessingModels() throws IOException {
+    void shouldAddByDefaultAllSnmpMessageDispatcherProcessingModels() throws IOException {
         try (final SnmpClient client = createClient()) {
             final MessageDispatcher dispatcher = client.getSnmp().getMessageDispatcher();
             assertNotNull(dispatcher.getMessageProcessingModel(MPv1.ID));
             assertNotNull(dispatcher.getMessageProcessingModel(MPv2c.ID));
             assertNotNull(dispatcher.getMessageProcessingModel(MPv3.ID));
+        }
+    }
+
+    @Test
+    void shouldAddOnlySupportedSnmpMessageDispatcherProcessingModels() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c", "3"));
+
+        try (final SnmpClient client = builder.build()) {
+            final MessageDispatcher dispatcher = client.getSnmp().getMessageDispatcher();
+            assertNull(dispatcher.getMessageProcessingModel(MPv1.ID));
+            assertNotNull(dispatcher.getMessageProcessingModel(MPv2c.ID));
+            assertNotNull(dispatcher.getMessageProcessingModel(MPv3.ID));
+        }
+    }
+
+    @Test
+    void shouldAddTsmWhenVersion3IsEnabled() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"));
+
+        final Integer32 tsmModelId = new Integer32(SecurityModel.SECURITY_MODEL_TSM);
+        SecurityModels.getInstance().removeSecurityModel(tsmModelId);
+
+        try (final SnmpClient ignore = builder.build()) {
+            final SecurityModel securityModel = SecurityModels
+                    .getInstance()
+                    .getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_TSM));
+
+            assertNotNull(securityModel);
+        }
+    }
+
+    @Test
+    void shouldNotAddTsmWhenVersion3IsDisabled() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"));
+
+        final Integer32 tsmModelId = new Integer32(SecurityModel.SECURITY_MODEL_TSM);
+        SecurityModels.getInstance().removeSecurityModel(tsmModelId);
+
+        try (final SnmpClient ignore = builder.build()) {
+            final SecurityModel securityModel = SecurityModels
+                    .getInstance()
+                    .getSecurityModel(tsmModelId);
+
+            assertNull(securityModel);
         }
     }
 
@@ -235,6 +283,16 @@ class SnmpClientTest {
             final PrivacyProtocol protocol = SecurityProtocols.getInstance().getPrivacyProtocol(Priv3DES.ID);
             assertNotNull(protocol);
         }
+    }
+
+    @Test
+    void shouldFailToSetSupportedVersionsEmpty() {
+        final IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> createClientBuilder(Set.of("udp")).setSupportedVersions(Set.of())
+        );
+
+        assertEquals("at least one SNMP version must be supported", exception.getMessage());
     }
 
     @Test
@@ -451,6 +509,23 @@ class SnmpClientTest {
     }
 
     @Test
+    void getWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.get(target, new OID[]{new OID("1.1")})
+            );
+
+            assertEquals("SNMP version `3` is disabled", exception.getMessage());
+        }
+    }
+
+    @Test
     void walkWithNullOrEmptyResponseShouldReturnEmpty() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final TreeUtils treeUtils = mock(TreeUtils.class);
@@ -533,6 +608,23 @@ class SnmpClientTest {
             responseVariables.forEach(binding -> verify(client).coerceVariable(binding.getVariable()));
             assertEquals("foo", response.get("iso.foo"));
             assertEquals("bar", response.get("iso.bar"));
+        }
+    }
+
+    @Test
+    void walkWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.walk(target, new OID("1.1"))
+            );
+
+            assertEquals("SNMP version `3` is disabled", exception.getMessage());
         }
     }
 
@@ -636,6 +728,23 @@ class SnmpClientTest {
             assertEquals("2", mappedEventTwo.get("index"));
             assertEquals("foo", mappedEventTwo.get("two.foo"));
             assertEquals("bar", mappedEventTwo.get("two.bar"));
+        }
+    }
+
+    @Test
+    void tableWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("1"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "2c");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.table(target, "FOO", List.of(new OID("1.1")))
+            );
+
+            assertEquals("SNMP version `2c` is disabled", exception.getMessage());
         }
     }
 

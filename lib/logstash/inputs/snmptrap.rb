@@ -1,8 +1,8 @@
 # encoding: utf-8
-require "logstash/inputs/base"
-require "logstash/namespace"
+require 'logstash/inputs/base'
+require 'logstash/namespace'
+require 'set'
 
-require "set"
 require 'logstash-integration-snmp_jars'
 require 'logstash/plugin_mixins/ecs_compatibility_support'
 require 'logstash/plugin_mixins/ecs_compatibility_support/target_check'
@@ -29,20 +29,23 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
 
   extend LogStash::PluginMixins::ValidatorSupport::FieldReferenceValidationAdapter
 
-  config_name "snmptrap"
+  config_name 'snmptrap'
 
   # The address to listen on
-  config :host, :validate => :string, :default => "0.0.0.0"
+  config :host, :validate => :string, :default => '0.0.0.0'
 
   # The port to listen on. Remember that ports less than 1024 (privileged
   # ports) may require root to use. hence the default of 1062.
   config :port, :validate => :number, :default => 1062
 
-  # The protocols to listen on.
-  config :supported_protocols, :validate => %w[tcp udp], :default => %w[udp], :list => true
+  # The supported transport protocols to listen on.
+  config :supported_transports, :validate => %w[tcp udp], :default => %w[udp], :required => true, :list => true
+
+  # The support SNMP versions to listen on
+  config :supported_versions, :validate => %w[1 2c], default: %w[1 2c], :required => true, :list => true
 
   # SNMP Community String to listen for.
-  config :community, :validate => :array, :default => "public"
+  config :community, :validate => :array, :default => 'public'
 
   # directory of YAML MIB maps  (same format ruby-snmp uses)
   config :yamlmibdir, :validate => :string
@@ -52,16 +55,16 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # The target is only relevant while decoding data into a new event.
   config :target, :validate => :field_reference
 
-  BASE_MIB_PATH = ::File.join(__FILE__, "..", "..", "..", "mibs")
+  BASE_MIB_PATH = ::File.join(__FILE__, '..', '..', '..', 'mibs')
 
   # These MIBs were automatically added by ruby-snmp when no @yamlmibdir was provided.
   DEFAULT_MIB_PATHS = [
-    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-SMI.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "SNMPv2-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "IF-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "IP-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "TCP-MIB.dic"),
-    ::File.join(BASE_MIB_PATH, "ietf", "UDP-MIB.dic"),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'SNMPv2-SMI.dic'),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'SNMPv2-MIB.dic'),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'IF-MIB.dic'),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'IP-MIB.dic'),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'TCP-MIB.dic'),
+    ::File.join(BASE_MIB_PATH, 'ietf', 'UDP-MIB.dic')
   ].map { |path| ::File.expand_path(path) }
 
   def initialize(params={})
@@ -83,10 +86,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
       end
     end
 
-    @client = org.logstash.snmp.SnmpClient
-              .builder(mib_manager, @supported_protocols.to_set, @port)
-              .setThreadPoolName('SnmpTrapWorker')
-              .build
+    @client = build_client!(mib_manager)
 
   end # def register
 
@@ -95,7 +95,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
       trap_message_consumer = lambda { |trap| consume_trap_message(output_queue, trap) }
       @client.trap(@community, trap_message_consumer)
     rescue => e
-      @logger.warn("SNMP Trap listener died", :exception => e, :backtrace => e.backtrace)
+      @logger.warn('SNMP Trap listener died', :exception => e, :backtrace => e.backtrace)
       Stud.stoppable_sleep(5) { stop? }
       retry if !stop?
     end # begin
@@ -105,17 +105,25 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     begin
       @client.close unless @client.nil?
     rescue => e
-      logger.warn("error closing SNMP client. Ignoring", :exception => e)
+      logger.warn('Error closing SNMP client. Ignoring', :exception => e)
     end
   end
 
   private
 
+  def build_client!(mib_manager)
+    org.logstash.snmp.SnmpClient
+        .builder(mib_manager, @supported_transports.to_set, @port)
+        .setSupportedVersions(@supported_versions.to_set)
+        .setThreadPoolName('SnmpTrapWorker')
+        .build
+  end
+
   def consume_trap_message(output_queue, trap_message)
     begin
       output_queue << process_trap_message(trap_message)
     rescue => e
-      @logger.error("Failed to create event", :exception => e, :backtrace => e.backtrace, :trap_object => trap_message)
+      @logger.error('Failed to create event', :exception => e, :backtrace => e.backtrace, :trap_object => trap_message)
     end
   end
 
