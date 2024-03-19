@@ -10,6 +10,7 @@
   - Migrated `logstash-input-snmptrap` client from ruby-snmp to SNMP4J
     - The event `message` content was changed from the ruby `SNMP::SNMPv1_Trap` object `inspect` representation
       to a hash dump based on the RFC definition. It also adds the fields as `[@metadata][input][snmptrap][pdu][<name>]` metadata.
+    - Added `supported_transports` and `supported_versions` options.
   - Standardized the `logstash-input-snmp` and `logstash-input-snmptrap` settings, supported MIB formats and features.
     - Both plugins now support .dic (`libsmi`) and .yaml (`ruby-snmp`) MIB formats.
     - Added the `oid_mapping_format` option to configure how the OID field is mapped in the Logstash event.

@@ -137,7 +137,8 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-oid_root_skip>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-port>> |<<number,number>>|No
-| <<plugins-{type}s-{plugin}-supported_protocols>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-supported_transports>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-supported_versions>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-use_provided_mibs>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|__Deprecated__
@@ -243,13 +244,26 @@ NOTE: This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_fo
 The port to listen on. Remember that ports less than 1024 (privileged
 ports) may require root to use. hence the default of 1062.
 
-[id="plugins-{type}s-{plugin}-supported_protocols"]
-===== `supported_protocols`
+[id="plugins-{type}s-{plugin}-supported_transports"]
+===== `supported_transports`
   * Value type is <<string,string>>
   * Allowed values are: `tcp`, `udp`
   * Default value is `["udp"]`
 
 The supported transport protocols to listen on.
+
+SNMP was originally designed for use with UDP as transport protocol and is the official recommendation.
+TCP is an optional transport mapping and can be enabled if needed. For more details
+on SNMP over TCP, please refer to the https://datatracker.ietf.org/doc/html/rfc3430[RFC-3430].
+
+[id="plugins-{type}s-{plugin}-supported_versions"]
+===== `supported_versions`
+  * Value type is <<string,string>>
+  * Allowed values are: `1`, `2c`
+  * Default value is `["1", "2c"]`
+
+The supported SNMP protocol versions to listen on.
+SNMP messages received, which version is unsupported/disabled, are automatically discarded.
 
 [id="plugins-{type}s-{plugin}-target"]
 ===== `target`
