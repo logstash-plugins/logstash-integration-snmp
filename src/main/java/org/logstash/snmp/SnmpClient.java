@@ -73,6 +73,7 @@ public class SnmpClient implements Closeable {
     private final Snmp snmp;
     private final OctetString contextEngineId;
     private final OctetString contextName;
+    private final Set<Integer> supportedVersions;
     private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
@@ -85,7 +86,8 @@ public class SnmpClient implements Closeable {
 
     SnmpClient(
             MibManager mib,
-            Set<String> protocols,
+            Set<String> supportedTransports,
+            Set<Integer> supportedVersions,
             String host,
             int port,
             String threadPoolName,
@@ -98,17 +100,31 @@ public class SnmpClient implements Closeable {
         this.mib = mib;
         this.contextEngineId = contextEngineId;
         this.contextName = contextName;
+        this.supportedVersions = supportedVersions;
 
         // global security models/protocols
         SecurityProtocols.getInstance().addDefaultProtocols();
         SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
-        SecurityModels.getInstance().addSecurityModel(new TSM(localEngineId, false));
 
-        this.snmp = createSnmpClient(protocols, host, port, localEngineId, users, threadPoolName, threadPoolSize);
+        if (supportedVersions.contains(SnmpConstants.version3)) {
+            SecurityModels.getInstance().addSecurityModel(new TSM(localEngineId, false));
+        }
+
+        this.snmp = createSnmpClient(
+                supportedTransports,
+                supportedVersions,
+                host,
+                port,
+                localEngineId,
+                users,
+                threadPoolName,
+                threadPoolSize
+        );
     }
 
     private static Snmp createSnmpClient(
-            Set<String> protocols,
+            Set<String> supportedTransports,
+            Set<Integer> supportedVersions,
             String host,
             int port,
             OctetString localEngineId,
@@ -117,14 +133,49 @@ public class SnmpClient implements Closeable {
             int threadPoolSize
     ) throws IOException {
         final int engineBootCount = 0;
-        final USM usm = createUsm(usmUsers, localEngineId, engineBootCount);
-        final Snmp snmp = new Snmp(createMessageDispatcher(usm, engineBootCount, threadPoolName, threadPoolSize));
+        final MessageDispatcher messageDispatcher = createMessageDispatcher(
+                localEngineId,
+                supportedVersions,
+                usmUsers,
+                engineBootCount,
+                threadPoolName,
+                threadPoolSize
+        );
 
-        for (final String protocol : protocols) {
-            snmp.addTransportMapping(createTransport(parseAddress(protocol, host, port)));
+        final Snmp snmp = new Snmp(messageDispatcher);
+        for (final String transport : supportedTransports) {
+            snmp.addTransportMapping(createTransport(parseAddress(transport, host, port)));
         }
 
         return snmp;
+    }
+
+    private static MessageDispatcher createMessageDispatcher(
+            OctetString localEngineId,
+            Set<Integer> supportedVersions,
+            List<UsmUser> usmUsers,
+            int engineBootCount,
+            String threadPoolName,
+            int threadPoolSize
+    ) {
+        final ThreadPool threadPool = ThreadPool.create(threadPoolName, threadPoolSize);
+        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+
+        if (supportedVersions.contains(SnmpConstants.version1)) {
+            dispatcher.addMessageProcessingModel(new MPv1());
+        }
+
+        if (supportedVersions.contains(SnmpConstants.version2c)) {
+            dispatcher.addMessageProcessingModel(new MPv2c());
+        }
+
+        if (supportedVersions.contains(SnmpConstants.version3)) {
+            final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
+            mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
+            dispatcher.addMessageProcessingModel(mpv3);
+        }
+
+        return dispatcher;
     }
 
     private static USM createUsm(List<UsmUser> usmUsers, OctetString localEngineID, int engineBootCount) {
@@ -135,25 +186,6 @@ public class SnmpClient implements Closeable {
         }
 
         return usm;
-    }
-
-    private static MessageDispatcher createMessageDispatcher(
-            USM usm,
-            int engineBootCount,
-            String threadPoolName,
-            int threadPoolSize
-    ) {
-        final ThreadPool threadPool = ThreadPool.create(threadPoolName, threadPoolSize);
-        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
-
-        dispatcher.addMessageProcessingModel(new MPv1());
-        dispatcher.addMessageProcessingModel(new MPv2c());
-
-        final MPv3 mpv3 = new MPv3(usm);
-        mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
-        dispatcher.addMessageProcessingModel(mpv3);
-
-        return dispatcher;
     }
 
     public void listen() throws IOException {
@@ -240,6 +272,8 @@ public class SnmpClient implements Closeable {
     }
 
     public Map<String, Object> get(Target target, OID[] oids) throws IOException {
+        validateTargetVersion(target);
+
         final PDU pdu = createPDU(target, PDU.GET);
         pdu.addAll(VariableBinding.createFromOIDs(oids));
 
@@ -271,6 +305,8 @@ public class SnmpClient implements Closeable {
     }
 
     public Map<String, Object> walk(Target target, OID oid) {
+        validateTargetVersion(target);
+
         final TreeUtils treeUtils = createGetTreeUtils();
         final List<TreeEvent> events = treeUtils.getSubtree(target, oid);
 
@@ -316,6 +352,8 @@ public class SnmpClient implements Closeable {
     }
 
     public Map<String, List<Map<String, Object>>> table(Target target, String tableName, Collection<OID> oids) {
+        validateTargetVersion(target);
+
         final TableUtils tableUtils = createGetTableUtils();
         final List<TableEvent> events = tableUtils.getTable(target, oids.toArray(new OID[0]), null, null);
 
@@ -398,6 +436,12 @@ public class SnmpClient implements Closeable {
             String message = String.format("error: unable to read variable value. Syntax: %d (%s)", variable.getSyntax(), variable.getSyntaxString());
             logger.error(message);
             return message;
+        }
+    }
+
+    private void validateTargetVersion(Target target) {
+        if (!this.supportedVersions.contains(target.getVersion())) {
+            throw new SnmpClientException(String.format("SNMP version `%s` is disabled", parseSnmpVersion(target.getVersion())));
         }
     }
 
