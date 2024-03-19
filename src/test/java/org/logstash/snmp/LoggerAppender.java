@@ -47,6 +47,16 @@ public class LoggerAppender extends AbstractAppender {
         assertLog(clazz, level, p -> format.equals(p.getMessage().getFormat()));
     }
 
+    public void assertNoLogWithFormat(Class<?> clazz, Level level, String format) {
+        try {
+            assertLog(clazz, level, p -> format.equals(p.getMessage().getFormat()));
+        } catch (AssertionError e) {
+            return;
+        }
+
+        fail(String.format("%s: received unexpected %s message with format %s", clazz.getName(), level, format));
+    }
+
     public void assertLog(Class<?> clazz, Level level, Predicate<LogEvent> assertion) {
         final Map<Level, List<LogEvent>> byClass = events.get(clazz.getName());
         final String failMessage = String.format("%s: not received expected %s message", clazz.getName(), level);

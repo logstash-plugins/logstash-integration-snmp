@@ -34,7 +34,6 @@ Gem::Specification.new do |s|
   # Restrict use of this plugin to versions of Logstash where support for integration plugins is present.
   s.add_runtime_dependency "logstash-core", ">= 6.5.0"
   s.add_development_dependency 'rspec-wait'
-  s.add_runtime_dependency 'snmp'
   s.add_development_dependency 'logstash-devutils', '>= 2.3'
   s.platform = "java"
 end

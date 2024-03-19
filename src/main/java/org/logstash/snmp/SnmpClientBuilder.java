@@ -2,13 +2,16 @@ package org.logstash.snmp;
 
 import org.logstash.snmp.mib.MibManager;
 import org.snmp4j.mp.MPv3;
+import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.OctetString;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.logstash.snmp.SnmpUtils.parseAuthProtocol;
 import static org.logstash.snmp.SnmpUtils.parseNullableOctetString;
@@ -18,23 +21,17 @@ public final class SnmpClientBuilder {
     private final MibManager mib;
     private final int port;
     private OctetString localEngineId = new OctetString(MPv3.createLocalEngineID());
-    private final Set<String> protocols;
+    private final Set<String> supportedTransports;
+    private Set<Integer> supportedVersions = Set.of(SnmpConstants.version1, SnmpConstants.version2c, SnmpConstants.version3);
     private String host = "0.0.0.0";
     private final List<UsmUser> usmUsers = new ArrayList<>();
     private int threadPoolSize = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private String threadPoolName = "SnmpWorker";
-    private OctetString contextEngineId;
-    private OctetString contextName;
 
-    public SnmpClientBuilder(MibManager mib, Set<String> protocols, int port) {
+    public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
-        this.protocols = protocols;
+        this.supportedTransports = supportedTransports;
         this.port = port;
-    }
-
-    public SnmpClientBuilder addProtocol(final String protocol) {
-        this.protocols.add(protocol);
-        return this;
     }
 
     public SnmpClientBuilder setHost(final String host) {
@@ -75,28 +72,31 @@ public final class SnmpClientBuilder {
         return this;
     }
 
-    public SnmpClientBuilder setContextEngineId(final String contextEngineId) {
-        this.contextEngineId = new OctetString(contextEngineId);
-        return this;
-    }
+    public SnmpClientBuilder setSupportedVersions(final Set<String> supportedVersions) {
+        final Set<Integer> versions = supportedVersions
+                .stream()
+                .map(SnmpUtils::parseSnmpVersion)
+                .collect(Collectors.toCollection(HashSet::new));
 
-    public SnmpClientBuilder setContextName(final String contextName) {
-        this.contextName = new OctetString(contextName);
+        if (versions.isEmpty()) {
+            throw new IllegalArgumentException("at least one SNMP version must be supported");
+        }
+
+        this.supportedVersions = versions;
         return this;
     }
 
     public SnmpClient build() throws IOException {
         return new SnmpClient(
                 mib,
-                protocols,
+                supportedTransports,
+                supportedVersions,
                 host,
                 port,
                 threadPoolName,
                 threadPoolSize,
                 usmUsers,
-                localEngineId,
-                contextEngineId,
-                contextName
+                localEngineId
         );
     }
 }
