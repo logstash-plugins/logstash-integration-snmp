@@ -46,7 +46,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   config :supported_transports, :validate => %w[tcp udp], :default => %w[udp], :required => true, :list => true
 
   # The supported SNMP versions to listen on
-  config :supported_versions, :validate => %w[1 2c], default: %w[1 2c], :required => true, :list => true
+  config :supported_versions, :validate => %w[1 2c 3], default: %w[1 2c], :required => true, :list => true
 
   # SNMP Community String to listen for.
   config :community, :validate => :array, :default => 'public'
@@ -64,7 +64,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     ::File.join(MIB_BASE_PATH, 'ietf', 'UDP-MIB.dic')
   ].map { |path| ::File.expand_path(path) }
 
-  def initialize(params={})
+  def initialize(params = {})
     super(params)
 
     setup_deprecated_params!
@@ -82,7 +82,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     end
 
     @client = build_client!(mib_manager)
-  end # def register
+  end
 
   def run(output_queue)
     begin
@@ -92,8 +92,8 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
       @logger.warn('SNMP Trap listener died', :exception => e, :backtrace => e.backtrace)
       Stud.stoppable_sleep(5) { stop? }
       retry if !stop?
-    end # begin
-  end # def run
+    end
+  end
 
   def stop
     return if @client.nil?
@@ -108,11 +108,12 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   private
 
   def build_client!(mib_manager)
-    org.logstash.snmp.SnmpClient
-        .builder(mib_manager, @supported_transports.to_set, @port)
-        .setSupportedVersions(@supported_versions.to_set)
-        .setThreadPoolName('SnmpTrapWorker')
-        .build
+    client_builder = org.logstash.snmp.SnmpClient
+                        .builder(mib_manager, @supported_transports.to_set, @port)
+                        .setSupportedVersions(@supported_versions.to_set)
+                        .setThreadPoolName('SnmpTrapWorker')
+
+    build_snmp_client!(client_builder, validate_usm_user: @supported_versions.include?('3'))
   end
 
   def consume_trap_message(output_queue, trap_message)
@@ -161,4 +162,4 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
       end
     end
   end
-end # class LogStash::Inputs::Snmptrap
+end

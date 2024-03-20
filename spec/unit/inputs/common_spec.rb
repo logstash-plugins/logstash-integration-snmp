@@ -1,33 +1,33 @@
-require "logstash/devutils/rspec/spec_helper"
+require 'logstash/devutils/rspec/spec_helper'
 require_relative '../../../lib/logstash/inputs/snmp'
 require_relative '../../../lib/logstash/inputs/snmptrap'
 
-shared_examples "a common SNMP plugin" do
-  let(:mock_client) { double("org.logstash.snmp.SnmpClient") }
+shared_examples 'a common SNMP plugin' do
+  let(:mock_client) { double('org.logstash.snmp.SnmpClient') }
 
   context 'oid_root_skip and oid_path_length validation' do
     before(:each) do
       allow(plugin).to receive(:build_client!).and_return(mock_client)
     end
 
-    context "with only `oid_root_skip` set" do
+    context 'with only `oid_root_skip` set' do
       let(:config) { super().merge('oid_mapping_format' => 'default', 'oid_root_skip' => 1) }
       it 'should not raise' do
-        expect{ plugin.register }.to_not raise_error
+        expect { plugin.register }.to_not raise_error
       end
     end
 
-    context "with only `oid_path_length` set" do
+    context 'with only `oid_path_length` set' do
       let(:config) { super().merge('oid_mapping_format' => 'default', 'oid_path_length' => 1) }
       it 'should not raise' do
-        expect{ plugin.register }.to_not raise_error
+        expect { plugin.register }.to_not raise_error
       end
     end
 
-    context "with `oid_root_skip` and `oid_path_length` set" do
-      let(:config) { super().merge({'oid_mapping_format' => 'default', 'oid_root_skip' => 1, 'oid_path_length' => 1}) }
+    context 'with `oid_root_skip` and `oid_path_length` set' do
+      let(:config) { super().merge({ 'oid_mapping_format' => 'default', 'oid_root_skip' => 1, 'oid_path_length' => 1 }) }
       it 'should raise' do
-        expect{ plugin.register }.to raise_error(LogStash::ConfigurationError, 'Use either `oid_root_skip` or `oid_path_length`')
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, 'Use either `oid_root_skip` or `oid_path_length`')
       end
     end
   end
@@ -40,16 +40,16 @@ shared_examples "a common SNMP plugin" do
     context 'with value set to `default`' do
       let(:config) { super().merge('oid_mapping_format' => 'default') }
       context 'and oid_root_skip set' do
-        let(:config) { super().merge("oid_root_skip" => 1 ) }
+        let(:config) { super().merge('oid_root_skip' => 1) }
         it 'should not raise' do
-          expect{ plugin.register }.to_not raise_error
+          expect { plugin.register }.to_not raise_error
         end
       end
 
       context 'and oid_path_length set' do
-        let(:config) { super().merge("oid_path_length" => 1 ) }
+        let(:config) { super().merge('oid_path_length' => 1) }
         it 'should not raise' do
-          expect{ plugin.register }.to_not raise_error
+          expect { plugin.register }.to_not raise_error
         end
       end
     end
@@ -59,16 +59,16 @@ shared_examples "a common SNMP plugin" do
         let(:config) { super().merge('oid_mapping_format' => format) }
 
         context 'and oid_root_skip set' do
-          let(:config) { super().merge("oid_root_skip" => 1 ) }
+          let(:config) { super().merge('oid_root_skip' => 1) }
           it 'should raise' do
-            expect{ plugin.register }.to raise_error(LogStash::ConfigurationError, 'The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`')
+            expect { plugin.register }.to raise_error(LogStash::ConfigurationError, 'The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`')
           end
         end
 
         context 'and oid_path_length set' do
-          let(:config) { super().merge("oid_path_length" => 1 ) }
+          let(:config) { super().merge('oid_path_length' => 1) }
           it 'should raise' do
-            expect{ plugin.register }.to raise_error(LogStash::ConfigurationError, 'The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`')
+            expect { plugin.register }.to raise_error(LogStash::ConfigurationError, 'The `oid_root_skip` and `oid_path_length` requires setting `oid_mapping_format` to `default`')
           end
         end
       end
@@ -77,7 +77,7 @@ shared_examples "a common SNMP plugin" do
     context 'build_mib_manager!' do
       context 'with mib_paths set' do
         let(:config) { super().merge('mib_paths' => %w[/foo /bar]) }
-        let(:mock_mib_manager) { double("org.logstash.snmp.mib.MibManager") }
+        let(:mock_mib_manager) { double('org.logstash.snmp.mib.MibManager') }
 
         it 'should add paths to MIB manager' do
           allow(plugin).to receive(:new_mib_manager).and_return(mock_mib_manager)
@@ -92,7 +92,7 @@ shared_examples "a common SNMP plugin" do
 
       context 'with `use_provided_mibs` set to `true`' do
         let(:config) { super().merge('use_provided_mibs' => true) }
-        let(:mock_mib_manager) { double("org.logstash.snmp.mib.MibManager") }
+        let(:mock_mib_manager) { double('org.logstash.snmp.mib.MibManager') }
 
         it 'should add provided paths to MIB manager' do
           allow(plugin).to receive(:new_mib_manager).and_return(mock_mib_manager)
@@ -108,7 +108,7 @@ shared_examples "a common SNMP plugin" do
 
       context 'with `use_provided_mibs` set to `false`' do
         let(:config) { super().merge('use_provided_mibs' => false) }
-        let(:mock_mib_manager) { double("org.logstash.snmp.mib.MibManager") }
+        let(:mock_mib_manager) { double('org.logstash.snmp.mib.MibManager') }
 
         it 'should not add provided paths to MIB manager' do
           allow(plugin).to receive(:new_mib_manager).and_return(mock_mib_manager)
@@ -122,7 +122,7 @@ shared_examples "a common SNMP plugin" do
 
       { 'default' => org.logstash.snmp.DefaultOidFieldMapper,
         'ruby_snmp' => org.logstash.snmp.RubySnmpOidFieldMapper,
-        'dotted_string' => org.logstash.snmp.DottedStringOidFieldMapper, }.each do |format, expected_kind|
+        'dotted_string' => org.logstash.snmp.DottedStringOidFieldMapper }.each do |format, expected_kind|
         context "with `oid_mapping_format` set to `#{format}`" do
           let(:config) { super().merge('oid_mapping_format' => format) }
 
@@ -134,14 +134,142 @@ shared_examples "a common SNMP plugin" do
       end
     end
   end
+
+  context '#build_snmp_client!' do
+    let(:client_builder) { double('org.logstash.snmp.SnmpClientBuilder') }
+
+    context 'with `local_engine_id` set' do
+      context 'with length lower than 5' do
+        let(:config) { super().merge('local_engine_id' => '1234') }
+
+        it 'should raise' do
+          error_message = '`local_engine_id` length must be greater or equal than 5'
+          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to raise_error(LogStash::ConfigurationError, error_message)
+        end
+      end
+
+      context 'with valid length' do
+        let(:local_engine_id) { '0' * 32 }
+        let(:config) { super().merge('local_engine_id' => local_engine_id) }
+
+        it 'should set builder value' do
+          expect(client_builder).to receive(:setLocalEngineId).with(local_engine_id)
+          expect(client_builder).to receive(:build)
+          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to_not raise_error
+        end
+      end
+
+      context 'with length greater than 32' do
+        let(:config) { super().merge('local_engine_id' => '0' * 33) }
+
+        it 'should raise' do
+          error_message = '`local_engine_id` length must be lower or equal than 32'
+          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to raise_error(LogStash::ConfigurationError, error_message)
+        end
+      end
+    end
+
+    context 'with USM user validation' do
+      let(:config) { super().merge('security_name' => 'public') }
+
+      context 'with `security_name` not set' do
+        let(:config) { super().reject! { |k| k == 'security_name'} }
+
+        it 'should raise' do
+          error_message = '`security_name` is required when SNMP v3 is enabled'
+          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to raise_error(LogStash::ConfigurationError, error_message)
+        end
+      end
+
+      context 'with `security_level` set to `noAuthNoPriv`' do
+        let(:config) do
+          {
+            'security_name' => 'foobar',
+            'security_level' => 'noAuthNoPriv'
+          }
+        end
+
+        it 'should not raise' do
+          expect(client_builder).to receive(:addUsmUser)
+          expect(client_builder).to receive(:build)
+          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
+        end
+      end
+
+      [{ protocol: 'auth_protocol', pass: 'auth_pass', protocol_value: 'md5', security_levels: %w[authPriv authNoPriv]},
+       { protocol: 'priv_protocol', pass: 'priv_pass', protocol_value: 'des', security_levels: %w[authPriv] }].each do |config|
+        context "with only `#{config[:protocol]}` set" do
+          let(:config) { super().merge((config[:protocol]).to_s => (config[:protocol_value]).to_s ) }
+
+          it 'should raise' do
+            error_message = /Using `#{config[:protocol]}` requires the `#{config[:pass]}`/
+            expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to raise_error(LogStash::ConfigurationError, error_message)
+          end
+        end
+
+        context "with only `#{config[:pass]}` set" do
+          let(:config) { super().merge((config[:pass]).to_s => 'foobar') }
+
+          it 'should raise' do
+            error_message = /`#{config[:protocol]}` is required when using `#{config[:pass]}`/
+            expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to raise_error(LogStash::ConfigurationError, error_message)
+          end
+        end
+
+        context "with both `#{config[:protocol]}` and `#{config[:pass]}` set" do
+          let(:config) { super().merge({ "#{config[:protocol]}" => config[:protocol_value], "#{config[:pass]}" => '*' * 10 }) }
+
+          it 'should not raise' do
+            expect(client_builder).to receive(:addUsmUser)
+            expect(client_builder).to receive(:build)
+            expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
+          end
+        end
+
+        context "with valid `#{config[:pass]}` length" do
+          let(:config) { super().merge({ "#{config[:protocol]}" => config[:protocol_value], "#{config[:pass]}" => '*' * 8 }) }
+
+          it 'should not raise' do
+            expect(client_builder).to receive(:addUsmUser)
+            expect(client_builder).to receive(:build)
+            expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
+          end
+        end
+
+        context "with invalid `#{config[:pass]}` length" do
+          let(:config) { super().merge("#{config[:pass]}" => '**') }
+
+          it 'should raise' do
+            error_message = /`#{config[:pass]}` passphrase must be at least 8 bytes long/
+            expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to raise_error(LogStash::ConfigurationError, error_message)
+          end
+        end
+
+        config[:security_levels].each do |security_level|
+          context "with `security_level` set to `#{security_level}`" do
+            let(:config) { super().merge('security_level' => security_level) }
+
+            context "and no `#{config[:protocol]}` set" do
+              let(:config) { super().reject { |k| k == config[:protocol] } }
+
+              it 'should raise' do
+                error_message = /Using `security_level` set to `#{security_level}` requires the configuration of `#{config[:protocol]}`/
+                expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to raise_error(LogStash::ConfigurationError, error_message)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 describe 'SNMP input plugins' do
-  let(:config) {{}}
+  let(:config) { {} }
   subject(:plugin) { described_class.new(config) }
 
   describe LogStash::Inputs::Snmp do
-    let(:config) {{ 'get' => ['1.3.6.1.2.1.1.1.0'], 'hosts' => [{'host' => 'udp:127.0.0.1/161'}] }}
+    let(:config) { { 'get' => ['1.3.6.1.2.1.1.1.0'], 'hosts' => [{'host' => 'udp:127.0.0.1/161'}] } }
 
     it_behaves_like 'a common SNMP plugin'
 
