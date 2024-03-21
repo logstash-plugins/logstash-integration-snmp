@@ -132,6 +132,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-community>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-local_engine_id>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
 | <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
@@ -144,18 +145,56 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|__Deprecated__
 |=======================================================================
 
+==== SNMPv3 Authentication Options
+
+This plugin supports the following SNMPv3 authentication options.
+
+[cols="<,<,<",options="header",]
+|=======================================================================
+|Setting |Input type|Required
+| <<plugins-{type}s-{plugin}-auth_pass>> |<<password,password>>|No
+| <<plugins-{type}s-{plugin}-auth_protocol>> |<<string,string>>, one of `["md5", "sha", "sha2", "hmac128sha224", "hmac192sha256", "hmac256sha384", "hmac384sha512"]`|No
+| <<plugins-{type}s-{plugin}-priv_pass>> |<<password,password>>|No
+| <<plugins-{type}s-{plugin}-priv_protocol>> |<<string,string>>, one of `["des", "3des", "aes", "aes128", "aes192", "aes256"]`|No
+| <<plugins-{type}s-{plugin}-security_level>> |<<string,string>>, one of `["noAuthNoPriv", "authNoPriv", "authPriv"]`|No
+| <<plugins-{type}s-{plugin}-security_name>> |<<string,string>>|No
+|=======================================================================
+
+==== SNMP Trap Input Configuration Options
+
 Also see <<plugins-{type}s-{plugin}-common-options>> for a list of options supported by all
 input plugins.
-
-&nbsp;
 
 [id="plugins-{type}s-{plugin}-community"]
 ===== `community` 
 
   * Value type is <<array,array>>
-  * Default value is `"public"`
+  * Default value is `["public"]`
 
-SNMP Community String to listen for.
+The SNMPv1 and SNMPv2c communities to listen for.
+To allow any community, set this config value to empty `community => []`.
+
+Examples
+
+*Listen for `public` and `guest` communities*
+[source,ruby]
+-----
+input {
+  snmptrap {
+    community => ["public", "guest"]
+  }
+}
+-----
+
+*Listen for all communities*
+[source,ruby]
+-----
+input {
+  snmptrap {
+    community => []
+  }
+}
+-----
 
 [id="plugins-{type}s-{plugin}-ecs_compatibility"]
 ===== `ecs_compatibility`
@@ -177,6 +216,15 @@ Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (E
   * Default value is `"0.0.0.0"`
 
 The address to listen on
+
+[id="plugins-{type}s-{plugin}-local_engine_id"]
+===== `local_engine_id`
+
+  * Value type is <<string,string>>
+  * There is no default value for this setting
+
+The SNMPv3 local engine ID. Its length must be greater or equal than 5 and less or equal than 32.
+If not provided, a default ID is generated based on the local IP address and additional four random bytes.
 
 [id="plugins-{type}s-{plugin}-mib_paths"]
 ===== `mib_paths`
@@ -205,21 +253,6 @@ Defines the mapping textual representation of an OID in the Logstash event.
 `dotted_string` maps fields using the standard dotted string representation, Example:
 `1.3.6.1.2.1.1.2.0` is mapped as  `1.3.6.1.2.1.1.2.0`
 
-[id="plugins-{type}s-{plugin}-oid_root_skip"]
-===== `oid_root_skip`
-
-  * Value type is <<number,number>>
-  * Default value is `0`
-
-The `oid_root_skip` option specifies the number of OID root digits to ignore in the event field name.
-For example, in a numeric OID like "1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting `oid_root_skip => 5`
-which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
-"1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
-
-NOTE: You cannot use this setting and <<plugins-{type}s-{plugin}-oid_path_length>> at the same time.
-
-NOTE: This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
-
 [id="plugins-{type}s-{plugin}-oid_path_length"]
 ===== `oid_path_length`
 
@@ -232,6 +265,21 @@ which would result in a field name "1.0". Similarly when a MIB is used an OID su
 "1.3.6.1.2.mib-2.system.sysDescr.0" would become "sysDescr.0"
 
 NOTE: You cannot use this setting and <<plugins-{type}s-{plugin}-oid_root_skip>> at the same time.
+
+NOTE: This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
+
+[id="plugins-{type}s-{plugin}-oid_root_skip"]
+===== `oid_root_skip`
+
+  * Value type is <<number,number>>
+  * Default value is `0`
+
+The `oid_root_skip` option specifies the number of OID root digits to ignore in the event field name.
+For example, in a numeric OID like "1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting `oid_root_skip => 5`
+which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
+"1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
+
+NOTE: You cannot use this setting and <<plugins-{type}s-{plugin}-oid_path_length>> at the same time.
 
 NOTE: This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
 
@@ -259,7 +307,7 @@ on SNMP over TCP, please refer to the https://datatracker.ietf.org/doc/html/rfc3
 [id="plugins-{type}s-{plugin}-supported_versions"]
 ===== `supported_versions`
   * Value type is <<string,string>>
-  * Allowed values are: `1`, `2c`
+  * Allowed values are: `1`, `2c`, `3`
   * Default value is `["1", "2c"]`
 
 The supported SNMP protocol versions to listen on.
@@ -294,7 +342,83 @@ deprecated[4.0.0, Replaced by <<plugins-{type}s-{plugin}-mib_paths>>]
 
 directory of YAML MIB maps  (same format ruby-snmp uses)
 
+==== SNMPv3 Authentication Options
+
+A **single user** can be configured. Multiple snmptrap input declarations will be needed if multiple SNMPv3 users are required.
+These options are required only if you are using SNMPv3.
+
+[id="plugins-{type}s-{plugin}-auth_pass"]
+===== `auth_pass`
+
+  * Value type is <<password,password>>
+  * There is no default value for this setting
+
+The `auth_pass` option specifies the SNMPv3 authentication passphrase or password.
+
+[id="plugins-{type}s-{plugin}-auth_protocol"]
+===== `auth_protocol`
+
+The `auth_protocol` option specifies the SNMPv3 authentication protocol or type
+
+* Value can be any of: `md5`, `sha`, `sha2`, `hmac128sha224`, `hmac192sha256`, `hmac256sha384`, `hmac384sha512`
+* Note that `sha2` and `hmac192sha256` are equivalent
+* There is no default value for this setting
+
+[id="plugins-{type}s-{plugin}-priv_pass"]
+===== `priv_pass`
+
+  * Value type is <<password,password>>
+  * There is no default value for this setting
+
+The `priv_pass` option specifies the SNMPv3 encryption password.
+
+[id="plugins-{type}s-{plugin}-priv_protocol"]
+===== `priv_protocol`
+
+  * Value can be any of: `des`, `3des`, `aes`, `aes128`, `aes192`, `aes256`
+  * Note that `aes` and `aes128` are equivalent
+  * There is no default value for this setting
+
+The `priv_protocol` option specifies the SNMPv3 privacy/encryption protocol.
+
+[id="plugins-{type}s-{plugin}-security_level"]
+===== `security_level`
+
+  * Value can be any of: `noAuthNoPriv`, `authNoPriv`, `authPriv`
+  * There is no default value for this setting
+
+The `security_level` option specifies the SNMPv3 security level between
+Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Privacy.
+
+[id="plugins-{type}s-{plugin}-security_name"]
+===== `security_name`
+
+  * Value type is <<string,string>>
+  * There is no default value for this setting
+
+The `security_name` option specifies the SNMPv3 security name or user name.
+
+==== Configuration examples
+
+*Specifying SNMPv3 traps settings*
+
+[source,ruby]
+-----
+input {
+  snmptrap {
+    supported_versions => ['3']
+    security_name => "mySecurityName"
+    auth_protocol => "sha"
+    auth_pass => "ShaPassword"
+    priv_protocol => "aes"
+    priv_pass => "AesPasword"
+    security_level => "authPriv"
+  }
+}
+-----
+
 [id="plugins-{type}s-{plugin}-common-options"]
 include::{include_path}/{type}.asciidoc[]
 
 :default_codec!:
+
