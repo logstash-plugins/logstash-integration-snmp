@@ -69,4 +69,8 @@ public class MibManager {
     Map<String, MibReader> getMibFileReaders() {
         return Collections.unmodifiableMap(mibFileReaders);
     }
+
+    OidFieldMapper getFieldMapper() {
+        return fieldMapper;
+    }
 }
