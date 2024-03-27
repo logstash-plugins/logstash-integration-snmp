@@ -141,6 +141,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-supported_transports>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-supported_versions>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-threads>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-use_provided_mibs>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|__Deprecated__
 |=======================================================================
@@ -323,6 +324,14 @@ The name of the field under which SNMP payloads are assigned.
 If not specified data will be stored in the root of the event.
 
 Setting a target is recommended when <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled.
+
+[id="plugins-{type}s-{plugin}-threads"]
+===== `threads`
+
+  * Value type is <<number,number>>
+  * Default value is 75% of the number of CPU cores
+
+The number of threads to use for processing the received SNMP trap messages.
 
 [id="plugins-{type}s-{plugin}-use_provided_mibs"]
 ===== `use_provided_mibs`

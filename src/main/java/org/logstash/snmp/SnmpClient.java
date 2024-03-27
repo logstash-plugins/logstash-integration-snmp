@@ -53,7 +53,6 @@ import org.snmp4j.util.TreeUtils;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -88,8 +87,8 @@ public class SnmpClient implements Closeable {
             Set<Integer> supportedVersions,
             String host,
             int port,
-            String threadPoolName,
-            int threadPoolSize,
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize,
             List<UsmUser> users,
             OctetString localEngineId
     ) throws IOException {
@@ -111,8 +110,8 @@ public class SnmpClient implements Closeable {
                 port,
                 localEngineId,
                 users,
-                threadPoolName,
-                threadPoolSize
+                messageDispatcherPoolName,
+                messageDispatcherPoolSize
         );
     }
 
@@ -123,8 +122,8 @@ public class SnmpClient implements Closeable {
             int port,
             OctetString localEngineId,
             List<UsmUser> usmUsers,
-            String threadPoolName,
-            int threadPoolSize
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize
     ) throws IOException {
         final int engineBootCount = 0;
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
@@ -132,8 +131,8 @@ public class SnmpClient implements Closeable {
                 supportedVersions,
                 usmUsers,
                 engineBootCount,
-                threadPoolName,
-                threadPoolSize
+                messageDispatcherPoolName,
+                messageDispatcherPoolSize
         );
 
         final Snmp snmp = new Snmp(messageDispatcher);
@@ -149,10 +148,10 @@ public class SnmpClient implements Closeable {
             Set<Integer> supportedVersions,
             List<UsmUser> usmUsers,
             int engineBootCount,
-            String threadPoolName,
-            int threadPoolSize
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize
     ) {
-        final ThreadPool threadPool = ThreadPool.create(threadPoolName, threadPoolSize);
+        final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
         final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
 
         if (supportedVersions.contains(SnmpConstants.version1)) {
@@ -344,11 +343,11 @@ public class SnmpClient implements Closeable {
         return new TreeUtils(getSnmp(), creatPDUFactory(PDU.GET));
     }
 
-    public Map<String, List<Map<String, Object>>> table(Target target, String tableName, Collection<OID> oids) {
+    public Map<String, List<Map<String, Object>>> table(Target target, String tableName, OID[] oids) {
         validateTargetVersion(target);
 
         final TableUtils tableUtils = createGetTableUtils();
-        final List<TableEvent> events = tableUtils.getTable(target, oids.toArray(new OID[0]), null, null);
+        final List<TableEvent> events = tableUtils.getTable(target, oids, null, null);
 
         if (events == null || events.isEmpty()) {
             return Collections.emptyMap();
@@ -373,7 +372,7 @@ public class SnmpClient implements Closeable {
             }
 
             final Map<String, Object> row = new HashMap<>();
-            row.put("index", event.getIndex().toString());
+            row.put("index", String.valueOf(event.getIndex()));
 
             for (final VariableBinding binding : variableBindings) {
                 if (binding == null) {
@@ -466,7 +465,12 @@ public class SnmpClient implements Closeable {
             ((CommunityTarget) target).setCommunity(new OctetString(community));
         }
 
-        target.setAddress(GenericAddress.parse(address));
+        final Address targetAddress = GenericAddress.parse(address);
+        if (targetAddress == null) {
+            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", address));
+        }
+
+        target.setAddress(targetAddress);
         target.setVersion(snmpVersion);
         target.setRetries(retries);
         target.setTimeout(timeout);
@@ -507,7 +511,7 @@ public class SnmpClient implements Closeable {
             case "tls":
                 return new TlsAddress(address);
             default:
-                throw new SnmpClientException(String.format("invalid transport protocol specified '%s', expecting 'udp', 'tcp' or 'tls'", protocol));
+                throw new SnmpClientException(String.format("Invalid transport protocol specified '%s', expecting 'udp', 'tcp' or 'tls'", protocol));
         }
     }
 
