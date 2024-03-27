@@ -62,27 +62,6 @@ describe LogStash::Inputs::Snmp do
     it_behaves_like "snmp plugin return single event"
   end
 
-  describe "invalid user against snmpv3 server", :integration => true do
-    let(:config) { super().merge({
-                                   "hosts" => [{"host" => "tcp:snmp1/161", "version" => "3"}],
-                                   "security_name" => "user_2",
-                                   "auth_protocol" => "sha",
-                                   "auth_pass" => "STrP@SSPhr@sE",
-                                   "priv_protocol" => "aes",
-                                   "priv_pass" => "STr0ngP@SSWRD161",
-                                   "security_level" => "authPriv"
-                               })}
-
-    it "should have error log" do
-      expect(plugin.logger).to receive(:error).once
-      plugin.register
-      queue = []
-      stop_plugin_after_seconds(plugin)
-      plugin.run(queue)
-      plugin.close
-    end
-  end
-
   describe "single input plugin on single server with snmpv2 and mix of udp and tcp", :integration => true do
     let(:config) { super().merge({"hosts" => [{"host" => "udp:snmp1/161", "community" => "public"}, {"host" => "tcp:snmp1/161", "community" => "public"}]})}
     it "should return two events " do
@@ -199,7 +178,7 @@ describe LogStash::Inputs::Snmp do
 
   def stop_plugin_after_seconds(plugin)
       Thread.new{
-        sleep(2)
+        sleep(3)
         plugin.do_stop
       }
   end

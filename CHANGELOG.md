@@ -18,3 +18,4 @@
   - The `logstash-input-snmptrap` `yamlmibdir` was deprecated in favor of `mib_paths`.
   - Updated the `logstash-input-snmptrap` docs to include the same `logstash-input-snmp` instructions on how importing MIB files.
   - Added SNMPv3 support to `logstash-input-snmptrap`.
+  - Added multi-thread support to `logstash-input-snmp` and `logstash-input-snmptrap` plugins.

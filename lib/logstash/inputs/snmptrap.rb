@@ -54,6 +54,12 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # directory of YAML MIB maps  (same format ruby-snmp uses)
   config :yamlmibdir, :validate => :string, :deprecated => "Use `mib_paths` instead."
 
+  # Number of threads to use for processing the received SNMP messages.
+  # By default, SNMP4J uses a single listener thread, which delegates all received data
+  # to the message dispatcher. This setting, configures the number of threads to be used
+  # by the message dispatcher, so it won't block the listener thread.
+  config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.seventy_five_percent
+
   # These MIBs were automatically added by ruby-snmp when no @yamlmibdir was provided.
   MIB_DEFAULT_PATHS = [
     ::File.join(MIB_BASE_PATH, 'ietf', 'SNMPv2-SMI.dic'),
@@ -111,7 +117,8 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     client_builder = org.logstash.snmp.SnmpClient
                         .builder(mib_manager, @supported_transports.to_set, @port)
                         .setSupportedVersions(@supported_versions.to_set)
-                        .setThreadPoolName('SnmpTrapWorker')
+                        .setMessageDispatcherPoolName('SnmpTrapMessageDispatcherWorker')
+                        .setMessageDispatcherPoolSize(@threads)
 
     build_snmp_client!(client_builder, validate_usm_user: @supported_versions.include?('3'))
   end

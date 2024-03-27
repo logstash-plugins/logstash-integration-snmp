@@ -25,8 +25,8 @@ public final class SnmpClientBuilder {
     private Set<Integer> supportedVersions = Set.of(SnmpConstants.version1, SnmpConstants.version2c, SnmpConstants.version3);
     private String host = "0.0.0.0";
     private final List<UsmUser> usmUsers = new ArrayList<>();
-    private int threadPoolSize = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
-    private String threadPoolName = "SnmpWorker";
+    private int messageDispatcherPoolSize = 1;
+    private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -62,13 +62,13 @@ public final class SnmpClientBuilder {
         return this;
     }
 
-    public SnmpClientBuilder setThreadPoolName(final String threadPoolName) {
-        this.threadPoolName = threadPoolName;
+    public SnmpClientBuilder setMessageDispatcherPoolName(final String messageDispatcherPoolName) {
+        this.messageDispatcherPoolName = messageDispatcherPoolName;
         return this;
     }
 
-    public SnmpClientBuilder setThreadPoolSize(final int threadPoolSize) {
-        this.threadPoolSize = Math.max(1, threadPoolSize);
+    public SnmpClientBuilder setMessageDispatcherPoolSize(final int messageDispatcherPoolSize) {
+        this.messageDispatcherPoolSize = Math.max(1, messageDispatcherPoolSize);
         return this;
     }
 
@@ -93,8 +93,8 @@ public final class SnmpClientBuilder {
                 supportedVersions,
                 host,
                 port,
-                threadPoolName,
-                threadPoolSize,
+                messageDispatcherPoolName,
+                messageDispatcherPoolSize,
                 usmUsers,
                 localEngineId
         );

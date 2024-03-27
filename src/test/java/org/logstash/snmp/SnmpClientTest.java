@@ -10,6 +10,7 @@ import org.logstash.snmp.mib.MibManager;
 import org.logstash.snmp.trap.SnmpTrapMessage;
 import org.mockito.ArgumentCaptor;
 import org.snmp4j.CommandResponderEvent;
+import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.PDU;
 import org.snmp4j.PDUv1;
@@ -17,6 +18,7 @@ import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
 import org.snmp4j.TransportMapping;
+import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -26,6 +28,7 @@ import org.snmp4j.security.AuthHMAC192SHA256;
 import org.snmp4j.security.AuthMD5;
 import org.snmp4j.security.Priv3DES;
 import org.snmp4j.security.PrivacyProtocol;
+import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
@@ -36,6 +39,7 @@ import org.snmp4j.security.UsmUserEntry;
 import org.snmp4j.smi.Counter32;
 import org.snmp4j.smi.Counter64;
 import org.snmp4j.smi.Gauge32;
+import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.Integer32;
 import org.snmp4j.smi.IpAddress;
 import org.snmp4j.smi.Null;
@@ -83,7 +87,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SnmpClientTest {
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST_ADDRESS = "localhost/161";
     private static final int PORT = 1069;
     private static final String LOCAL_ENGINE_ID = new String(MPv3.createLocalEngineID());
     private static final UsmUser USER = new UsmUser(
@@ -358,7 +362,7 @@ class SnmpClientTest {
                 .when(snmp)
                 .send(pduCaptor.capture(), any(Target.class));
 
-        final Target v3Target = createTarget(clientSpy, HOST, targetVersion);
+        final Target v3Target = createTarget(clientSpy, HOST_ADDRESS, targetVersion);
         clientSpy.get(v3Target, expectedBindings);
 
         final PDU sentPdu = pduCaptor.getValue();
@@ -515,7 +519,7 @@ class SnmpClientTest {
                     .when(treeUtils)
                     .getSubtree(any(Target.class), any(OID.class));
 
-            final Target target = createTarget(client, HOST, "1");
+            final Target target = createTarget(client, HOST_ADDRESS, "1");
             assertTrue(client.walk(target, new OID("1")).isEmpty());
             assertTrue(client.walk(target, new OID("2")).isEmpty());
         }
@@ -618,9 +622,9 @@ class SnmpClientTest {
                     .when(tableUtils)
                     .getTable(any(Target.class), any(OID[].class), isNull(), isNull());
 
-            final Target target = createTarget(client, HOST, "1");
-            assertTrue(client.table(target, "fooTable", List.of(new OID("1"))).isEmpty());
-            assertTrue(client.table(target, "barTable", List.of(new OID("2"))).isEmpty());
+            final Target target = createTarget(client, HOST_ADDRESS, "1");
+            assertTrue(client.table(target, "fooTable", new OID[]{new OID("1")}).isEmpty());
+            assertTrue(client.table(target, "barTable", new OID[]{new OID("2")}).isEmpty());
         }
     }
 
@@ -645,7 +649,7 @@ class SnmpClientTest {
                     .getTable(any(Target.class), any(OID[].class), isNull(), isNull());
 
             final Target target = createTarget(client, "tcp:192.168.1.1/161", "3");
-            final List<OID> oids = List.of(new OID("1.2.3"));
+            final OID[] oids = {new OID("1.2.3")};
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -688,7 +692,7 @@ class SnmpClientTest {
             final String tableName = "fooBarTable";
             final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
 
-            final var response = client.table(target, tableName, List.of(new OID("1")));
+            final var response = client.table(target, tableName, new OID[]{new OID("1")});
             assertFalse(response.isEmpty());
             Arrays.stream(responseVariables)
                     .forEach(binding -> verify(client, times(2)).coerceVariable(binding.getVariable()));
@@ -719,7 +723,7 @@ class SnmpClientTest {
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
-                    () -> client.table(target, "FOO", List.of(new OID("1.1")))
+                    () -> client.table(target, "FOO", new OID[]{new OID("1.1")})
             );
 
             assertEquals("SNMP version `2c` is disabled", exception.getMessage());
@@ -909,8 +913,7 @@ class SnmpClientTest {
         assertEquals(pdUv1.getSpecificTrap(), trapEvent.remove("specific_trap"));
         assertEquals(pdUv1.getTimestamp(), trapEvent.remove("timestamp"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         pdUv1.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -953,8 +956,7 @@ class SnmpClientTest {
         assertEquals(pdu.getErrorIndex(), trapEvent.remove("error_index"));
         assertEquals(TRAP_SECURITY_NAME, trapEvent.remove("community"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         pdu.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -996,8 +998,7 @@ class SnmpClientTest {
         assertEquals(scopedPDU.getErrorStatusText(), trapEvent.remove("error_status_text"));
         assertEquals(scopedPDU.getErrorIndex(), trapEvent.remove("error_index"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         scopedPDU.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -1051,6 +1052,85 @@ class SnmpClientTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2c"})
+    void createTargetV1AndV2ShouldRequireCommunity(String version) throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, version, 1, 1, null, null, null)
+            );
+            assertEquals("community is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetWithUnknownHostShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> client.createTarget("udp:unknown/161", "1", 1, 1, "public", null, null)
+            );
+
+            assertEquals("Invalid or unknown host address: `udp:unknown/161`", exception.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2c"})
+    void createTargetV1andV2ShouldCreateCommunityTarget(String version) throws IOException {
+        try (SnmpClient client = createClient()) {
+            final Target target = client.createTarget(HOST_ADDRESS, version, 10, 2000, "home", null, null);
+
+            assertInstanceOf(CommunityTarget.class, target);
+            final CommunityTarget communityTarget = (CommunityTarget) target;
+            assertEquals(GenericAddress.parse(HOST_ADDRESS), communityTarget.getAddress());
+            assertEquals(SnmpUtils.parseSnmpVersion(version), communityTarget.getVersion());
+            assertEquals(2000, communityTarget.getTimeout());
+            assertEquals(10, communityTarget.getRetries());
+            assertEquals("home", communityTarget.getCommunity().toString());
+            assertEquals(SecurityLevel.NOAUTH_NOPRIV, communityTarget.getSecurityLevel());
+        }
+    }
+
+    @Test
+    void createTargetV3WithoutSecurityNameShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, "3", 1, 1, null, null, "noauthnopriv")
+            );
+            assertEquals("security_name is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetV3WithoutSecurityLevelShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, "3", 1, 1, null, "guest", null)
+            );
+            assertEquals("security_level is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetV3ShouldCreateUserTarget() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final Target target = client.createTarget(HOST_ADDRESS, "3", 5, 1000, null, "myUser", "authpriv");
+
+            assertInstanceOf(UserTarget.class, target);
+            final UserTarget userTarget = (UserTarget) target;
+            assertEquals(GenericAddress.parse(HOST_ADDRESS), userTarget.getAddress());
+            assertEquals(SnmpConstants.version3, userTarget.getVersion());
+            assertEquals(1000, userTarget.getTimeout());
+            assertEquals(5, userTarget.getRetries());
+            assertEquals("myUser", userTarget.getSecurityName().toString());
+            assertEquals(SecurityLevel.AUTH_PRIV, userTarget.getSecurityLevel());
+        }
+    }
+
     private Target createTarget(SnmpClient client, String address, String version) {
         return client.createTarget(
                 address,
@@ -1073,8 +1153,8 @@ class SnmpClientTest {
 
     private SnmpClientBuilder createClientBuilder(Set<String> protocols) {
         return SnmpClient.builder(mibManager, protocols, PORT)
-                .setThreadPoolName("FooBarWorker")
-                .setThreadPoolSize(1)
+                .setMessageDispatcherPoolName("FooBarWorker")
+                .setMessageDispatcherPoolSize(1)
                 .setLocalEngineId(LOCAL_ENGINE_ID)
                 .addUsmUser(
                         USER.getSecurityName().toString(),

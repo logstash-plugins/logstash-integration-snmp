@@ -7,7 +7,9 @@ require_relative '../../../lib/logstash/inputs/snmp'
 describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   let(:mock_target) { double("org.snmp4j.Target") }
   let(:mock_client) { double("org.logstash.snmp.SnmpClient") }
-  let(:config) {{}}
+  let(:mock_aggregator) { double("org.logstash.snmp.SnmpClientRequestAggregator") }
+  let(:mock_aggregator_request) { double("org.logstash.snmp.SnmpClientRequestAggregator#Request") }
+  let(:config) { {} }
 
   subject(:plugin) { described_class.new(config) }
 
@@ -21,8 +23,15 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         allow(plugin).to receive(:build_client!).and_return(mock_client)
         allow(mock_client).to receive(:listen)
         allow(mock_client).to receive(:create_target).and_return(mock_target)
-        expect(mock_client).to receive(:get).and_return({})
         expect(mock_client).to receive(:close)
+
+        allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
+        expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+        expect(mock_aggregator).to receive(:await).and_return({})
+        expect(mock_aggregator).to receive(:close)
+
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async)
 
         plugin.register
       end
@@ -175,7 +184,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   ecs_compatibility_matrix(:disabled, :v1, :v8) do |ecs_select|
     let(:queue) { Queue.new }
     let(:run_once_runner) { RunOnceStoppableIntervalRunner.new(plugin) }
-    let(:config) {{'ecs_compatibility' => ecs_select.active_mode }}
+    let(:config) { { 'ecs_compatibility' => ecs_select.active_mode } }
 
     before(:each) do
       allow(plugin).to receive(:stoppable_interval_runner).and_return(run_once_runner)
@@ -183,11 +192,19 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       allow(mock_client).to receive(:listen)
       allow(mock_client).to receive(:create_target).and_return(mock_target)
       allow(mock_client).to receive(:close).at_most(:once)
+
+      allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
+      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      expect(mock_aggregator).to receive(:await)
+      allow(mock_aggregator).to receive(:close)
     end
 
     context 'mocked get' do
       before(:each) do
-        expect(mock_client).to receive(:get).and_return({"foo" => "bar"})
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call({ 'foo' => 'bar' })
+        end
       end
 
       context 'should add' do
@@ -253,7 +270,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       context 'with target configured' do
         let(:config) do
           super().merge({
-            'get' => ["1.3.6.1.2.1.1.1.0"],
+            'get' => ['1.3.6.1.2.1.1.1.0'],
             'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }],
             'target' => 'snmp_data'
           })
@@ -270,57 +287,36 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
-    context 'mocked nil get response' do
+    context 'mocked empty request result' do
       let(:config) do
         super().merge({
           'get' => ['1.3.6.1.2.1.1.1.0'],
-          'hosts' => [{'host' => 'udp:127.0.0.1/161', 'community' => 'public'}]
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }]
         })
       end
 
       let(:logger) { double("Logger").as_null_object }
 
       before(:each) do
-        expect(mock_client).to receive(:get).once.and_return(nil)
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call({})
+        end
+
         allow(plugin).to receive(:logger).and_return(logger)
-        expect(logger).not_to receive(:error)
+        expect(logger).to receive(:debug?).and_return(true)
+        expect(logger).to receive(:debug).with('No SNMP data retrieved', anything)
       end
 
       it 'generates no events when client returns no response' do
         plugin.register
         plugin.poll_clients(queue)
 
-        expect( queue.size ).to eql 0
+        expect(queue.size).to eql 0
       end
     end
 
-    context 'mocked nil table response' do
-      let(:config) do
-        super().merge({
-            'tables' => [
-                { 'name' => "a1Table", 'columns' => ["1.3.6.1.4.1.3375.2.2.5.2.3.1.1"] }
-            ],
-            "hosts" => [{"host" => "udp:127.0.0.1/161", "community" => "public"}]
-        })
-      end
-
-      let(:logger) { double("Logger").as_null_object }
-
-      before do
-        expect(mock_client).to receive(:table).once.and_return(nil)
-        allow(plugin).to receive(:logger).and_return(logger)
-        expect(logger).not_to receive(:error)
-      end
-
-      it 'generates no events when client returns no response' do
-        plugin.register
-        plugin.poll_clients(queue)
-
-        expect( queue.size ).to eql 0
-      end
-    end
-
-    context 'mocked nil walk response' do
+    context 'mocked no request response' do
       let(:config) do
         super().merge({
             'walk' => ["1.3.6.1.2.1.1"],
@@ -331,16 +327,15 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       let(:logger) { double("Logger").as_null_object }
 
       before do
-        expect(mock_client).to receive(:walk).once.and_return(nil)
-        allow(plugin).to receive(:logger).and_return(logger)
-        expect(logger).not_to receive(:error)
+        expect(mock_aggregator_request).to receive(:walk)
+        expect(mock_aggregator_request).to receive(:get_result_async)
       end
 
       it 'generates no events when client returns no response' do
         plugin.register
         plugin.poll_clients(queue)
 
-        expect( queue.size ).to eql 0
+        expect(queue.size).to eql 0
       end
     end
   end
@@ -450,8 +445,15 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       allow(plugin).to receive(:build_client!).and_return(mock_client)
       allow(mock_client).to receive(:listen)
       allow(mock_client).to receive(:create_target).and_return(mock_target)
-      allow(mock_client).to receive(:get).and_return({"foo" => "bar"})
       allow(mock_client).to receive(:close)
+
+      allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
+      expect(mock_aggregator).to receive(:await)
+      allow(mock_aggregator).to receive(:close)
+
+      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      expect(mock_aggregator_request).to receive(:get)
+      expect(mock_aggregator_request).to receive(:get_result_async)
     end
 
     it "should call client close method upon termination" do
@@ -460,6 +462,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       plugin.do_close
 
       expect(mock_client).to have_received(:close).once
+      expect(mock_aggregator).to have_received(:close).once
     end
   end
 end
@@ -469,7 +472,7 @@ class RunOnceStoppableIntervalRunner
     @plugin = plugin
   end
 
-  def every(interval_seconds, desc="operation", &block)
+  def every(interval_seconds, desc = 'operation', &block)
     yield
   end
 end
