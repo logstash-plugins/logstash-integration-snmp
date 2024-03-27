@@ -16,6 +16,7 @@ require 'logstash/plugin_mixins/snmp/common'
 class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   java_import 'org.logstash.snmp.SnmpClient'
+  java_import 'org.logstash.snmp.SnmpClientRequestAggregator'
   java_import 'org.snmp4j.smi.OID'
 
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
@@ -56,7 +57,10 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # The default, `30`, means poll each host every 30 seconds.
   config :interval, :validate => :number, :default => 30
 
-  def initialize(params={})
+  # Number of threads to use for concurrently executing the hosts SNMP requests.
+  config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.maximum
+
+  def initialize(params = {})
     super(params)
 
     @host_protocol_field = ecs_select[disabled: '[@metadata][host_protocol]', v1: '[@metadata][input][snmp][host][protocol]']
@@ -72,9 +76,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   def register
-    validate_oids!
-    validate_hosts!
-    validate_tables!
+    validate_config!
 
     mib_manager = build_mib_manager!
 
@@ -123,20 +125,25 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     end
 
     @client = build_client!(mib_manager, supported_transports, hosts_versions)
+    @request_aggregator = create_request_aggregator
   end
 
   def run(queue)
+    # Put the client into the listen mode, so it can send requests and receive responses
     @client.listen
-    # for now a naive single threaded poller which sleeps off the remaining interval between
-    # each run. each run polls all the defined hosts for the get, table and walk options.
-    stoppable_interval_runner.every(@interval, "polling hosts") do
+
+    # Single threaded poller which sleeps off the remaining interval between each run.
+    # Each run polls all the defined hosts for the get, table and walk options.
+    stoppable_interval_runner.every(@interval, 'polling hosts') do
       poll_clients(queue)
     end
   end
 
   def poll_clients(queue)
+    max_host_timeout = 0
+    in_flight_requests = []
+
     @client_definitions.each do |definition|
-      host = definition[:host_address]
       target = @client.create_target(
         definition[:host],
         definition[:version],
@@ -144,70 +151,56 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         definition[:timeout],
         definition[:host_community],
         definition[:security_name],
-        definition[:security_level],
+        definition[:security_level]
       )
 
-      result = {}
+      request = @request_aggregator.create_request(@client)
+      in_flight_requests << { request: request, definition: definition }
 
-      if !definition[:get].empty?
-        oids = definition[:get]
-        begin
-          data = @client.get(target, oids.map { |oid| OID.new(oid) })
-          if data&.any?
-            result.update(data)
-          else
-            logger.debug? && logger.debug("get operation returned no response", host: host, oids: oids)
-          end
-        rescue => e
-          logger.error("error invoking get operation, ignoring", host: host, oids: oids, exception: e, backtrace: e.backtrace)
-        end
+      if definition[:get].any?
+        request.get(target, definition[:get].map { |oid| OID.new(oid) })
       end
 
-      if !definition[:walk].empty?
-        definition[:walk].each do |oid|
-          begin
-            data = @client.walk(target, OID.new(oid))
-            if data&.any?
-              result.update(data)
-            else
-              logger.debug? && logger.debug("walk operation returned no response", host: host, oid: oid)
-            end
-          rescue => e
-            logger.error("error invoking walk operation, ignoring", host: host, oid: oid, exception: e, backtrace: e.backtrace)
-          end
-        end
+      definition[:walk]&.each do |oid|
+        request.walk(target, OID.new(oid))
       end
 
-      if !Array(@tables).empty?
-        @tables.each do |table_entry|
-          begin
-            table_name = table_entry['name']
-            oids = table_entry["columns"].map { |oid| OID.new(oid) }
-            data = @client.table(target, table_name, oids)
-            if data&.any?
-              result.update(data)
-            else
-              logger.debug? && logger.debug("table operation returned no response", host: host, table: table_entry)
-            end
-          rescue => e
-            logger.error("error invoking table operation, ignoring",
-                         host: host, table_name: table_entry['name'], exception: e, backtrace: e.backtrace)
-          end
-        end
+      @tables&.each do |table_entry|
+        oids = table_entry['columns'].map { |oid| OID.new(oid) }
+        request.table(target, table_entry['name'], oids)
       end
 
-      unless result.empty?
-        event = targeted_event_factory.new_event(result)
-        event.set(@host_protocol_field, definition[:host_protocol])
-        event.set(@host_address_field, definition[:host_address])
-        event.set(@host_port_field, definition[:host_port])
-        event.set(@host_community_field, definition[:host_community])
-        decorate(event)
-        queue << event
-      else
-        logger.debug? && logger.debug("no snmp data retrieved", host: definition[:host_address])
-      end
+      max_host_timeout = definition[:timeout] if definition[:timeout] > max_host_timeout
     end
+
+    in_flight_requests.each do |req|
+      definition = req[:definition]
+      result_consumer = lambda do |result|
+        if result&.any?
+          event = targeted_event_factory.new_event(result)
+          event.set(@host_protocol_field, definition[:host_protocol])
+          event.set(@host_address_field, definition[:host_address])
+          event.set(@host_port_field, definition[:host_port])
+          event.set(@host_community_field, definition[:host_community])
+          decorate(event)
+          queue << event
+        else
+          logger.debug? && logger.debug('No SNMP data retrieved', host: definition[:host_address])
+        end
+      end
+
+      req[:request].get_result_async(result_consumer)
+    end
+
+    # this timeout should be a safe-guard and it should never wait for that long.
+    # It might reach this point if there are several hosts operations, the hosts
+    # are unreachable/unhealthy, and/or the configured host timeout is too high.
+    in_flight_timeout = 1000 * 60 * 60 # 1 hour
+    in_flight_timeout = max_host_timeout if max_host_timeout > in_flight_timeout
+    in_flight_timeout = @interval if @interval > in_flight_timeout
+
+    # blocks until all requests are complete
+    @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, in_flight_timeout)
   end
 
   def stoppable_interval_runner
@@ -215,12 +208,17 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   def close
-    return if @client.nil?
+    # keep this close order (aggregator, client), so the request_aggregator can gracefully shutdown
+    begin
+      @request_aggregator.close unless @request_aggregator.nil?
+    rescue => e
+      logger.warn('Error closing SNMP client request aggregator. Ignoring', :exception => e)
+    end
 
     begin
-      @client.close
+      @client.close unless @client.nil?
     rescue => e
-      logger.warn("Error closing client. Ignoring", :exception => e)
+      logger.warn('Error closing SNMP client. Ignoring', :exception => e)
     end
   end
 
@@ -228,7 +226,13 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   OID_REGEX = /^\.?([0-9\.]+)$/
   HOST_REGEX = /^(?<host_protocol>\w+):(?<host_address>.+)\/(?<host_port>\d+)$/i
-  VERSION_REGEX =/^1|2c|3$/
+  VERSION_REGEX = /^1|2c|3$/
+
+  def validate_config!
+    validate_oids!
+    validate_hosts!
+    validate_tables!
+  end
 
   def validate_oids!
     @get = Array(@get).map do |oid|
@@ -279,6 +283,10 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         raise(LogStash::ConfigurationError, "each table definition must have a \"name\" option") if !table_entry.is_a?(Hash) || table_entry["name"].nil?
       end
     end
+  end
+
+  def create_request_aggregator
+    SnmpClientRequestAggregator.new(@threads, 'SnmpRequestWorker')
   end
 
   def build_client!(mib_manager, supported_transports, hosts_versions)
