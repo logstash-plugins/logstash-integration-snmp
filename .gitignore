@@ -3,3 +3,5 @@ Gemfile.lock
 .bundle
 .idea
 vendor
+/build/
+/.gradle
