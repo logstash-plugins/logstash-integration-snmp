@@ -78,6 +78,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end
 
   def register
+    validate_config!
     mib_manager = build_mib_manager!
 
     if !@mib_paths && !@use_provided_mibs
@@ -112,6 +113,12 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end
 
   private
+
+  def validate_config!
+    if !@security_name.nil? && !@supported_versions.include?('3')
+      raise(LogStash::ConfigurationError, "Using a `security_name` requires `supported_versions` to include version '3': #{@supported_versions}")
+    end
+  end
 
   def build_client!(mib_manager)
     client_builder = org.logstash.snmp.SnmpClient
