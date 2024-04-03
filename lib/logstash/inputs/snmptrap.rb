@@ -112,6 +112,10 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     end
   end
 
+  def client_listening?
+    @client.isListening()
+  end
+
   private
 
   def validate_config!
