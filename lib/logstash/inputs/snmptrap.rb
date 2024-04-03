@@ -75,7 +75,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     mib_manager = build_mib_manager!
 
     if !@mib_paths && !@use_provided_mibs
-      logger.info("Using default MIB paths #{MIB_DEFAULT_PATHS}")
+      logger.info('Loading default MIB files', :path => MIB_DEFAULT_PATHS)
       MIB_DEFAULT_PATHS.each do |path|
         mib_manager.add(path)
       end

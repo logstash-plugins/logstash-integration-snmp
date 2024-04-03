@@ -79,14 +79,16 @@ module LogStash
         def build_mib_manager!
           mib_manager = new_mib_manager
 
-          @mib_paths&.each do |path|
-            logger.info("Using user provided MIB path #{path}")
-            mib_manager.add(path)
+          if @mib_paths&.any?
+            logger.info('Loading user-provided MIB files', :path => @mib_paths)
+            @mib_paths.each do |path|
+              mib_manager.add(path)
+            end
           end
 
           if @use_provided_mibs
+            logger.info('Loading provided MIB files', :path => MIB_PROVIDED_PATHS)
             MIB_PROVIDED_PATHS.each do |path|
-              logger.info("Using plugin provided MIB path #{path}")
               mib_manager.add(path)
             end
           end
