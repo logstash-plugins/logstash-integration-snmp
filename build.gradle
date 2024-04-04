@@ -9,7 +9,7 @@ apply plugin: 'maven-publish'
 group "org.logstash.integrations"
 version "${new File("VERSION").text.trim()}"
 
-String snmp4jVersion = '2.8.4'
+String snmp4jVersion = '3.8.0'
 String snakeyamlVersion = '2.7'
 String junitVersion = '5.9.2'
 String log4jVersion = '2.17.0'

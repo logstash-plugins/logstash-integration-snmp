@@ -4,6 +4,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.logstash.snmp.mib.MibManager;
 import org.logstash.snmp.trap.SnmpTrapMessage;
+import org.snmp4j.CommandResponder;
+import org.snmp4j.CommandResponderEvent;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.MessageDispatcherImpl;
@@ -22,6 +24,7 @@ import org.snmp4j.security.Priv3DES;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
+import org.snmp4j.security.SecurityProtocols.SecurityProtocolSet;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
@@ -96,7 +99,7 @@ public class SnmpClient implements Closeable {
         this.supportedVersions = supportedVersions;
 
         // global security models/protocols
-        SecurityProtocols.getInstance().addDefaultProtocols();
+        SecurityProtocols.getInstance().addPredefinedProtocolSet(SecurityProtocolSet.maxCompatibility);
         SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
@@ -192,31 +195,34 @@ public class SnmpClient implements Closeable {
     void doTrap(String[] communities, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
         final Set<String> allowedCommunities = Set.of(communities);
 
-        getSnmp().addCommandResponder(event -> {
-            logger.debug("SNMP Trap received: {}", event);
-            final int version = event.getMessageProcessingModel();
-            final String securityName = new String(event.getSecurityName());
+        getSnmp().addCommandResponder(new CommandResponder() {
+            @Override
+            public <A extends Address> void processPdu(final CommandResponderEvent<A> event) {
+                logger.debug("SNMP Trap received: {}", event);
+                final int version = event.getMessageProcessingModel();
+                final String securityName = new String(event.getSecurityName());
 
-            // Empty communities means "allow all communities" (BC with ruby-snmp)
-            if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
-                logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
-                return;
+                // Empty communities means "allow all communities" (BC with ruby-snmp)
+                if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
+                    logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
+                    return;
+                }
+
+                final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
+                final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
+                for (VariableBinding binding : event.getPDU().getVariableBindings()) {
+                    formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
+                }
+
+                final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
+                        version,
+                        event.getSecurityName(),
+                        event.getPeerAddress(),
+                        trapEvent,
+                        formattedVarBindings);
+
+                consumer.accept(trapMessage);
             }
-
-            final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
-            final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
-            for (VariableBinding binding : event.getPDU().getVariableBindings()) {
-                formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
-            }
-
-            final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
-                    version,
-                    event.getSecurityName(),
-                    event.getPeerAddress(),
-                    trapEvent,
-                    formattedVarBindings);
-
-            consumer.accept(trapMessage);
         });
 
         getSnmp().listen();
@@ -263,13 +269,13 @@ public class SnmpClient implements Closeable {
         return trapEvent;
     }
 
-    public Map<String, Object> get(Target target, OID[] oids) throws IOException {
+    public Map<String, Object> get(Target<Address> target, OID[] oids) throws IOException {
         validateTargetVersion(target);
 
         final PDU pdu = createPDU(target, PDU.GET);
         pdu.addAll(VariableBinding.createFromOIDs(oids));
 
-        final ResponseEvent responseEvent = getSnmp().send(pdu, target);
+        final ResponseEvent<Address> responseEvent = getSnmp().send(pdu, target);
         if (responseEvent == null) {
             return Collections.emptyMap();
         }
@@ -296,7 +302,7 @@ public class SnmpClient implements Closeable {
         return result;
     }
 
-    public Map<String, Object> walk(Target target, OID oid) {
+    public Map<String, Object> walk(Target<Address> target, OID oid) {
         validateTargetVersion(target);
 
         final TreeUtils treeUtils = createGetTreeUtils();
@@ -343,7 +349,7 @@ public class SnmpClient implements Closeable {
         return new TreeUtils(getSnmp(), creatPDUFactory(PDU.GET));
     }
 
-    public Map<String, List<Map<String, Object>>> table(Target target, String tableName, OID[] oids) {
+    public Map<String, List<Map<String, Object>>> table(Target<Address> target, String tableName, OID[] oids) {
         validateTargetVersion(target);
 
         final TableUtils tableUtils = createGetTableUtils();
@@ -431,13 +437,13 @@ public class SnmpClient implements Closeable {
         }
     }
 
-    private void validateTargetVersion(Target target) {
+    private void validateTargetVersion(Target<Address> target) {
         if (!this.supportedVersions.contains(target.getVersion())) {
             throw new SnmpClientException(String.format("SNMP version `%s` is disabled", parseSnmpVersion(target.getVersion())));
         }
     }
 
-    public Target createTarget(
+    public Target<Address> createTarget(
             String address,
             String version,
             int retries,
@@ -447,13 +453,13 @@ public class SnmpClient implements Closeable {
             String securityLevel
     ) {
         final int snmpVersion = parseSnmpVersion(version);
-        final Target target;
+        final Target<Address> target;
 
         if (snmpVersion == SnmpConstants.version3) {
             Objects.requireNonNull(securityName, "security_name is required");
             Objects.requireNonNull(securityLevel, "security_level is required");
 
-            target = new UserTarget();
+            target = new UserTarget<>();
             target.setSecurityLevel(parseSecurityLevel(securityLevel));
             target.setSecurityName(new OctetString(securityName));
             if (address.startsWith("tls")) {
@@ -461,8 +467,8 @@ public class SnmpClient implements Closeable {
             }
         } else {
             Objects.requireNonNull(community, "community is required");
-            target = new CommunityTarget();
-            ((CommunityTarget) target).setCommunity(new OctetString(community));
+            target = new CommunityTarget<>();
+            ((CommunityTarget<Address>) target).setCommunity(new OctetString(community));
         }
 
         final Address targetAddress = GenericAddress.parse(address);
@@ -482,7 +488,7 @@ public class SnmpClient implements Closeable {
         return new DefaultPDUFactory(pduType);
     }
 
-    private PDU createPDU(Target target, int pduType) {
+    private PDU createPDU(Target<Address> target, int pduType) {
         final PDU pdu;
         if (target.getVersion() == SnmpConstants.version3) {
             pdu = new ScopedPDU();

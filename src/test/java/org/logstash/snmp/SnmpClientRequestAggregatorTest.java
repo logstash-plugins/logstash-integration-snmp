@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.Target;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
@@ -36,7 +37,7 @@ class SnmpClientRequestAggregatorTest {
     private static final int THREADS = 1;
     private static final String THREAD_POOL_NAME = "SnmpClientRequestAggregatorTest";
     private static final OID[] SOME_OIDS = new OID[]{new OID("1"), new OID("1.2")};
-    private static final Target COMMUNIT_TARGET = new CommunityTarget(GenericAddress.parse("127.0.0.1/161"), new OctetString("public"));
+    private static final Target<Address> COMMUNIT_TARGET = new CommunityTarget<>(GenericAddress.parse("127.0.0.1/161"), new OctetString("public"));
 
     private AutoCloseable mocks;
 
@@ -239,7 +240,7 @@ class SnmpClientRequestAggregatorTest {
 
     @Test
     void requestWithTableOperationShouldInvokeClientTable() {
-        final Target target = mock(Target.class);
+        final Target<Address> target = mock();
         final String tableName = "fooBarTable";
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
