@@ -523,7 +523,7 @@ public class SnmpClient implements Closeable {
 
     private static AbstractTransportMapping<? extends Address> createTransport(Address address) throws IOException {
         if (address instanceof TlsAddress) {
-            return new TLSTM();
+            return new TLSTM((TlsAddress) address);
         }
 
         if (address instanceof TcpAddress) {
