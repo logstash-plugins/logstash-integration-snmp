@@ -161,10 +161,8 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   end
 
   def add_metadata_fields(event, trap_event)
-    if ecs_compatibility != :disabled
-      trap_event.each do |name, value|
-        event.set("[@metadata][input][snmptrap][pdu][#{name}]", value) if value
-      end
+    trap_event.each do |name, value|
+      event.set("[@metadata][input][snmptrap][pdu][#{name}]", value) if value
     end
   end
 
