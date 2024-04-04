@@ -77,10 +77,10 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     mib_manager = MibManager.new(RubySnmpOidFieldMapper.new)
 
     if @yamlmibdir
-      logger.info("using user provided MIB path #{@yamlmibdir}")
+      logger.info("Loading user-provided MIB files", :path => @yamlmibdir)
       mib_manager.add(@yamlmibdir)
     else
-      logger.info("using default MIB paths #{DEFAULT_MIB_PATHS}")
+      logger.info("Loading default MIB files", :path => DEFAULT_MIB_PATHS)
       DEFAULT_MIB_PATHS.each do |path|
         mib_manager.add(path)
       end
@@ -95,7 +95,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
       trap_message_consumer = lambda { |trap| consume_trap_message(output_queue, trap) }
       @client.trap(@community, trap_message_consumer)
     rescue => e
-      @logger.warn('SNMP Trap listener died', :exception => e, :backtrace => e.backtrace)
+      @logger.warn('SNMP Trap listener died', format_log_data(e))
       Stud.stoppable_sleep(5) { stop? }
       retry if !stop?
     end # begin
@@ -105,7 +105,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     begin
       @client.close unless @client.nil?
     rescue => e
-      logger.warn('Error closing SNMP client. Ignoring', :exception => e)
+      logger.warn('Error closing SNMP client. Ignoring', format_log_data(e))
     end
   end
 
@@ -123,7 +123,8 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     begin
       output_queue << process_trap_message(trap_message)
     rescue => e
-      @logger.error('Failed to create event', :exception => e, :backtrace => e.backtrace, :trap_object => trap_message)
+      extra_data = { :trap_event => format_trap_message(trap_message) } if trap_message rescue {}
+      @logger.error('Failed to create event', format_log_data(e, extra_data))
     end
   end
 
@@ -148,6 +149,15 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
     trap_event = trap_message.getTrapEvent.to_hash
     trap_event['variable_bindings'] = trap_event['variable_bindings'].to_hash
     trap_event.inspect
+  end
+
+  def format_log_data(exception, extra_data = {})
+    data = {}
+    data[:exception] = exception.class
+    data[:message] = exception.message
+    data[:backtrace] = exception.backtrace if logger.debug?
+    data.merge!(extra_data)
+    data
   end
 
   def add_metadata_fields(event, trap_event)

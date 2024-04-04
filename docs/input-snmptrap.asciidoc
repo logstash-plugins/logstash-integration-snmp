@@ -137,7 +137,7 @@ on SNMP over TCP, please refer to the https://datatracker.ietf.org/doc/html/rfc3
   * Default value is `["1", "2c"]`
 
 The supported SNMP protocol versions to listen on.
-SNMP messages received, which version is unsupported/disabled, are automatically discarded.
+SNMP messages for versions that are either unsupported and/or disabled are automatically discarded.
 
 [id="plugins-{type}s-{plugin}-target"]
 ===== `target`
