@@ -7,6 +7,7 @@ import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.OctetString;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -27,6 +28,7 @@ public final class SnmpClientBuilder {
     private final List<UsmUser> usmUsers = new ArrayList<>();
     private int messageDispatcherPoolSize = 1;
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
+    private Duration closeTimeoutDuration;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -86,8 +88,13 @@ public final class SnmpClientBuilder {
         return this;
     }
 
+    SnmpClientBuilder setCloseTimeoutDuration(final Duration closeTimeoutDuration) {
+        this.closeTimeoutDuration = closeTimeoutDuration;
+        return this;
+    }
+
     public SnmpClient build() throws IOException {
-        return new SnmpClient(
+        final SnmpClient client = new SnmpClient(
                 mib,
                 supportedTransports,
                 supportedVersions,
@@ -98,5 +105,11 @@ public final class SnmpClientBuilder {
                 usmUsers,
                 localEngineId
         );
+
+        if (closeTimeoutDuration != null) {
+            client.setCloseTimeoutDuration(closeTimeoutDuration);
+        }
+
+        return client;
     }
 }

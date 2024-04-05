@@ -55,6 +55,7 @@ import org.snmp4j.util.TreeUtils;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -62,7 +63,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 import static java.util.Objects.nonNull;
@@ -75,6 +80,7 @@ public class SnmpClient implements Closeable {
     private final Snmp snmp;
     private final Set<Integer> supportedVersions;
     private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
+    private Duration closeTimeoutDuration = Duration.ofMinutes(1);
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
@@ -533,8 +539,34 @@ public class SnmpClient implements Closeable {
         return new DefaultUdpTransportMapping((UdpAddress) address);
     }
 
+    SnmpClient setCloseTimeoutDuration(Duration closeTimeoutDuration) {
+        this.closeTimeoutDuration = closeTimeoutDuration;
+        return this;
+    }
+
     @Override
     public void close() {
+        try {
+            // The async close and timeout are necessary here due to an existing
+            // race-condition in the SNMP4j ThreadPool class (v3.8.0). Such class
+            // might block if the pool #stop gets invoked before the #run reaches
+            // the #wait for new tasks, which is never notified. It affects mainly
+            // tests, where the client is closed very often.
+            CompletableFuture.runAsync(this::closeSnmpClient)
+                    .get(closeTimeoutDuration.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            logger.error("Current thread was interrupted while closing the SNMP client. Aborting", e);
+            Thread.currentThread().interrupt();
+        } catch (TimeoutException e) {
+            logger.error("Timed out while closing the SNMP client. Ignoring", e);
+        } catch (ExecutionException e) {
+            logger.error("Error closing the SNMP client. Ignoring", e.getCause());
+        } catch (Exception e) {
+            logger.error("Unexpected error closing the SNMP client. Ignoring", e);
+        }
+    }
+
+    private void closeSnmpClient() {
         try {
             snmp.close();
         } catch (Exception e) {

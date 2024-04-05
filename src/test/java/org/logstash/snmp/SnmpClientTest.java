@@ -61,6 +61,7 @@ import org.snmp4j.util.TreeEvent;
 import org.snmp4j.util.TreeUtils;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +89,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SnmpClientTest {
+    private static final Duration CLIENT_CLOSE_TIMEOUT = Duration.ofSeconds(5);
     private static final String HOST_ADDRESS = "localhost/161";
     private static final int PORT = 1069;
     private static final String LOCAL_ENGINE_ID = new String(MPv3.createLocalEngineID());
@@ -231,14 +233,14 @@ class SnmpClientTest {
         // through the global security model repository. Otherwise, users with the same name
         // but different passwords would conflict.
         final OctetString securityName = new OctetString("root");
-        try (final SnmpClient clientOne = SnmpClient.builder(mibManager, Set.of("tcp"), PORT)
+        try (final SnmpClient clientOne = creatEmptyClientBuilder(mibManager, Set.of("tcp"), PORT)
                 .addUsmUser(securityName.toString(),
                         "hmac192sha256",
                         "client-one-pass",
                         "3des",
                         "client-one-pass"
                 ).build();
-             final SnmpClient clientTwo = SnmpClient.builder(mibManager, Set.of("tcp"), PORT + 1)
+             final SnmpClient clientTwo = creatEmptyClientBuilder(mibManager, Set.of("tcp"), PORT + 1)
                      .addUsmUser(securityName.toString(),
                              "md5",
                              "client-two-pass",
@@ -1149,11 +1151,13 @@ class SnmpClientTest {
     }
 
     private SnmpClient createClient(Set<String> protocols) throws IOException {
-        return createClientBuilder(protocols).build();
+        return createClientBuilder(protocols)
+                .setCloseTimeoutDuration(CLIENT_CLOSE_TIMEOUT)
+                .build();
     }
 
     private SnmpClientBuilder createClientBuilder(Set<String> protocols) {
-        return SnmpClient.builder(mibManager, protocols, PORT)
+        return creatEmptyClientBuilder(mibManager, protocols, PORT)
                 .setMessageDispatcherPoolName("FooBarWorker")
                 .setMessageDispatcherPoolSize(1)
                 .setLocalEngineId(LOCAL_ENGINE_ID)
@@ -1163,5 +1167,10 @@ class SnmpClientTest {
                         USER.getAuthenticationPassphrase().toString(),
                         "des",
                         USER.getPrivacyPassphrase().toString());
+    }
+
+    private SnmpClientBuilder creatEmptyClientBuilder(MibManager mib, Set<String> protocols, int port){
+        return SnmpClient.builder(mib, protocols, port)
+                .setCloseTimeoutDuration(CLIENT_CLOSE_TIMEOUT);
     }
 }

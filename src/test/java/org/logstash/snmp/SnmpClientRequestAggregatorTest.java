@@ -33,7 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SnmpClientRequestAggregatorTest {
-    private static final long RESULT_TIMEOUT_MILLIS = 500;
+    private static final long RESULT_TIMEOUT_MILLIS = 1_000;
     private static final int THREADS = 1;
     private static final String THREAD_POOL_NAME = "SnmpClientRequestAggregatorTest";
     private static final OID[] SOME_OIDS = new OID[]{new OID("1"), new OID("1.2")};
