@@ -34,12 +34,20 @@ class SnmpUtilsTest {
     }
 
     @Test
+    void shouldParseSnmpVersionFromInteger() {
+        assertEquals("1", SnmpUtils.parseSnmpVersion(SnmpConstants.version1));
+        assertEquals("2c", SnmpUtils.parseSnmpVersion(SnmpConstants.version2c));
+        assertEquals("3", SnmpUtils.parseSnmpVersion(SnmpConstants.version3));
+        assertEquals("99", SnmpUtils.parseSnmpVersion(99));
+    }
+
+    @Test
     void shouldParseAuthProtocol() {
         assertNull(SnmpUtils.parseAuthProtocol(null));
         assertEquals(AuthMD5.ID, SnmpUtils.parseAuthProtocol("md5"));
         assertEquals(AuthSHA.ID, SnmpUtils.parseAuthProtocol("sha"));
-        assertEquals(AuthHMAC128SHA224.ID, SnmpUtils.parseAuthProtocol("sha2"));
         assertEquals(AuthHMAC128SHA224.ID, SnmpUtils.parseAuthProtocol("hmac128sha224"));
+        assertEquals(AuthHMAC192SHA256.ID, SnmpUtils.parseAuthProtocol("sha2"));
         assertEquals(AuthHMAC192SHA256.ID, SnmpUtils.parseAuthProtocol("hmac192sha256"));
         assertEquals(AuthHMAC256SHA384.ID, SnmpUtils.parseAuthProtocol("hmac256sha384"));
         assertEquals(AuthHMAC384SHA512.ID, SnmpUtils.parseAuthProtocol("hmac384sha512"));

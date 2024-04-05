@@ -1,12 +1,18 @@
 package org.logstash.snmp;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.logstash.snmp.mib.MibManager;
+import org.logstash.snmp.trap.SnmpTrapMessage;
 import org.mockito.ArgumentCaptor;
+import org.snmp4j.CommandResponderEvent;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.PDU;
+import org.snmp4j.PDUv1;
 import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
@@ -38,6 +44,7 @@ import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.Opaque;
 import org.snmp4j.smi.SMIConstants;
 import org.snmp4j.smi.TimeTicks;
+import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.UnsignedInteger32;
 import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultTcpTransportMapping;
@@ -53,6 +60,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,11 +68,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -83,16 +93,68 @@ class SnmpClientTest {
             SnmpConstants.usmDESPrivProtocol,
             new OctetString("priv-pass")
     );
+    public static final UdpAddress TRAP_PEER_ADDRESS = new UdpAddress("10.1.2.3/161");
+    public static final String TRAP_SECURITY_NAME = "public";
 
     private final MibManager mibManager = mock(MibManager.class);
 
+    @RegisterExtension
+    LoggerAppenderExtension loggerExt = new LoggerAppenderExtension(LogManager.getLogger(SnmpClient.class));
+
     @Test
-    void shouldAddSnmpMessageDispatcherProcessingModels() throws IOException {
+    void shouldAddByDefaultAllSnmpMessageDispatcherProcessingModels() throws IOException {
         try (final SnmpClient client = createClient()) {
             final MessageDispatcher dispatcher = client.getSnmp().getMessageDispatcher();
             assertNotNull(dispatcher.getMessageProcessingModel(MPv1.ID));
             assertNotNull(dispatcher.getMessageProcessingModel(MPv2c.ID));
             assertNotNull(dispatcher.getMessageProcessingModel(MPv3.ID));
+        }
+    }
+
+    @Test
+    void shouldAddOnlySupportedSnmpMessageDispatcherProcessingModels() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c", "3"));
+
+        try (final SnmpClient client = builder.build()) {
+            final MessageDispatcher dispatcher = client.getSnmp().getMessageDispatcher();
+            assertNull(dispatcher.getMessageProcessingModel(MPv1.ID));
+            assertNotNull(dispatcher.getMessageProcessingModel(MPv2c.ID));
+            assertNotNull(dispatcher.getMessageProcessingModel(MPv3.ID));
+        }
+    }
+
+    @Test
+    void shouldAddTsmWhenVersion3IsEnabled() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"));
+
+        final Integer32 tsmModelId = new Integer32(SecurityModel.SECURITY_MODEL_TSM);
+        SecurityModels.getInstance().removeSecurityModel(tsmModelId);
+
+        try (final SnmpClient ignore = builder.build()) {
+            final SecurityModel securityModel = SecurityModels
+                    .getInstance()
+                    .getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_TSM));
+
+            assertNotNull(securityModel);
+        }
+    }
+
+    @Test
+    void shouldNotAddTsmWhenVersion3IsDisabled() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"));
+
+        final Integer32 tsmModelId = new Integer32(SecurityModel.SECURITY_MODEL_TSM);
+        SecurityModels.getInstance().removeSecurityModel(tsmModelId);
+
+        try (final SnmpClient ignore = builder.build()) {
+            final SecurityModel securityModel = SecurityModels
+                    .getInstance()
+                    .getSecurityModel(tsmModelId);
+
+            assertNull(securityModel);
         }
     }
 
@@ -224,6 +286,16 @@ class SnmpClientTest {
     }
 
     @Test
+    void shouldFailToSetSupportedVersionsEmpty() {
+        final IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> createClientBuilder(Set.of("udp")).setSupportedVersions(Set.of())
+        );
+
+        assertEquals("at least one SNMP version must be supported", exception.getMessage());
+    }
+
+    @Test
     void listenShouldInvokeSnmpListen() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
@@ -270,28 +342,6 @@ class SnmpClientTest {
                     ScopedPDU.class,
                     new OID[]{new OID("1"), new OID("1.2.3")}
             );
-        }
-    }
-
-    @Test
-    void getWithContextEngineIdAndNameShouldProperlyCreateV3Pdu() throws IOException {
-        final OctetString contextEngineId = new OctetString("foo");
-        final OctetString contextName = new OctetString("bar");
-
-        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
-                .setContextEngineId(contextEngineId.toString())
-                .setContextName(contextName.toString())
-                .build()) {
-
-            final ScopedPDU pdu = (ScopedPDU) assertGetPdu(
-                    client,
-                    "3",
-                    ScopedPDU.class,
-                    new OID[]{new OID("1.2"), new OID("1.2.3.4.5")}
-            );
-
-            assertEquals(contextEngineId, pdu.getContextEngineID());
-            assertEquals(contextName, pdu.getContextName());
         }
     }
 
@@ -437,6 +487,23 @@ class SnmpClientTest {
     }
 
     @Test
+    void getWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.get(target, new OID[]{new OID("1.1")})
+            );
+
+            assertEquals("SNMP version `3` is disabled", exception.getMessage());
+        }
+    }
+
+    @Test
     void walkWithNullOrEmptyResponseShouldReturnEmpty() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final TreeUtils treeUtils = mock(TreeUtils.class);
@@ -519,6 +586,23 @@ class SnmpClientTest {
             responseVariables.forEach(binding -> verify(client).coerceVariable(binding.getVariable()));
             assertEquals("foo", response.get("iso.foo"));
             assertEquals("bar", response.get("iso.bar"));
+        }
+    }
+
+    @Test
+    void walkWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("2c"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.walk(target, new OID("1.1"))
+            );
+
+            assertEquals("SNMP version `3` is disabled", exception.getMessage());
         }
     }
 
@@ -626,6 +710,23 @@ class SnmpClientTest {
     }
 
     @Test
+    void tableWithUnsupportedTargetVersionShouldThrow() throws IOException {
+        try (final SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("1"))
+                .build()) {
+
+            final Target target = createTarget(client, "tcp:192.2.1.1/161", "2c");
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.table(target, "FOO", List.of(new OID("1.1")))
+            );
+
+            assertEquals("SNMP version `2c` is disabled", exception.getMessage());
+        }
+    }
+
+    @Test
     void coerceVariableShouldReturnErrorStringsWhenIsException() throws IOException {
         try (SnmpClient client = createClient()) {
             assertEquals("error: no such instance currently exists at this OID",
@@ -681,6 +782,272 @@ class SnmpClientTest {
                     "error: unable to read variable value. Syntax: 4 (OCTET STRING)",
                     client.coerceVariable(erroredVariable)
             );
+        }
+    }
+
+    @Test
+    void trapShouldAddCommandResponderAndListen() throws Exception {
+        try (final SnmpClient client = spy(createClient())) {
+            final Snmp snmp = spy(client.getSnmp());
+            when(client.getSnmp()).thenReturn(snmp);
+
+            doNothing().when(snmp).listen();
+
+            client.doTrap(new String[0], ignore -> {/*Empty*/}, new CountDownLatch(0));
+
+            verify(snmp).addCommandResponder(any());
+            verify(snmp).listen();
+        }
+    }
+
+    @Test
+    void trapShouldNotCallConsumerWhenCommunityIsNotAllowed() throws Exception {
+        assertTrapConsumerWhenCommunityIs(new String[]{"foo"}, "bar", false);
+    }
+
+    @Test
+    void trapShouldCallConsumerWhenCommunityIsAllowed() throws Exception {
+        assertTrapConsumerWhenCommunityIs(new String[]{"foo_community"}, "foo_community", true);
+    }
+
+    @Test
+    void trapShouldCallConsumerWhenCommunityIsEmpty() throws Exception {
+        assertTrapConsumerWhenCommunityIs(new String[0], "public", true);
+    }
+
+    private void assertTrapConsumerWhenCommunityIs(String[] allowedCommunities, String pduCommunity, boolean callExpected) throws Exception {
+        try (final SnmpClient client = spy(createClient())) {
+            final Snmp snmp = spy(client.getSnmp());
+            when(client.getSnmp()).thenReturn(snmp);
+            doNothing().when(snmp).listen();
+
+            final boolean[] called = new boolean[1];
+            // Start traps client with non-blocking latch
+            client.doTrap(allowedCommunities, ignore -> called[0] = true, new CountDownLatch(0));
+
+            final CommandResponderEvent responderEvent = mock(CommandResponderEvent.class);
+            when(responderEvent.getSecurityModel())
+                    .thenReturn(1);
+            when(responderEvent.getSecurityName())
+                    .thenReturn(pduCommunity.getBytes());
+            when(responderEvent.getPDU())
+                    .thenReturn(new PDUv1());
+
+            // Simulates an incoming trap message
+            snmp.processPdu(responderEvent);
+
+            assertEquals(callExpected, called[0]);
+
+            if (callExpected) {
+                loggerExt.getAppender().assertNoLogWithFormat(
+                        SnmpClient.class,
+                        Level.DEBUG,
+                        "Received trap message with unknown community: '{}'. Skipping"
+                );
+            } else {
+                loggerExt.getAppender().assertLogWithMessage(
+                        SnmpClient.class,
+                        Level.DEBUG,
+                        String.format("Received trap message with unknown community: '%s'. Skipping", pduCommunity)
+                );
+            }
+        }
+    }
+
+    @Test
+    void trapShouldProperlyCreateTrapMessageFormattedBindings() throws IOException {
+        final PDUv1 pdUv1 = new PDUv1();
+        pdUv1.setType(PDU.V1TRAP);
+        pdUv1.setVariableBindings(List.of(
+                new VariableBinding(new OID("1.1"), new OctetString("foo")),
+                new VariableBinding(new OID("1.2"), new OctetString("bar")),
+                new VariableBinding(new OID("1.3"), new OctetString("dummy"))
+        ));
+
+        when(mibManager.map(any(OID.class)))
+                .thenReturn("iso.foo", "iso.bar", "iso.dummy");
+
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(1, pdUv1);
+
+        final Map<String, Object> formattedVariableBindings = snmpTrapMessage.getFormattedVariableBindings();
+        assertEquals("foo", formattedVariableBindings.get("iso.foo"));
+        assertEquals("bar", formattedVariableBindings.get("iso.bar"));
+        assertEquals("dummy", formattedVariableBindings.get("iso.dummy"));
+    }
+
+    @Test
+    void trapShouldProperlyCreateV1TrapMessage() throws IOException {
+        final PDUv1 pdUv1 = new PDUv1();
+        pdUv1.setType(PDU.V1TRAP);
+        pdUv1.setRequestID(new Integer32(123));
+        pdUv1.setEnterprise(new OID("1.2.3.4.5"));
+        pdUv1.setAgentAddress(new IpAddress("123.123.123.123"));
+        pdUv1.setGenericTrap(100);
+        pdUv1.setSpecificTrap(200);
+        pdUv1.setTimestamp(300);
+        pdUv1.setVariableBindings(List.of(
+                new VariableBinding(new OID("1.1"), new OctetString("foo")),
+                new VariableBinding(new OID("1.2"), new OctetString("bar"))
+        ));
+
+        when(mibManager.map(any(OID.class)))
+                .thenReturn("iso.foo", "iso.bar");
+
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version1, pdUv1);
+        assertEquals(SnmpConstants.version1, snmpTrapMessage.getVersion());
+        assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
+        assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
+
+        final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
+        assertEquals("1", trapEvent.remove("version"));
+        assertEquals(PDU.getTypeString(pdUv1.getType()), trapEvent.remove("type"));
+
+        assertEquals(TRAP_SECURITY_NAME, trapEvent.remove("community"));
+        assertEquals(pdUv1.getEnterprise().toString(), trapEvent.remove("enterprise"));
+        assertEquals(pdUv1.getAgentAddress().toString(), trapEvent.remove("agent_addr"));
+        assertEquals(pdUv1.getGenericTrap(), trapEvent.remove("generic_trap"));
+        assertEquals(pdUv1.getSpecificTrap(), trapEvent.remove("specific_trap"));
+        assertEquals(pdUv1.getTimestamp(), trapEvent.remove("timestamp"));
+
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        pdUv1.getVariableBindings().forEach(binding -> assertEquals(
+                binding.getVariable().toString(),
+                variableBindings.remove(binding.getOid().toString()))
+        );
+
+        // No extra trap event properties
+        assertTrue(trapEvent.isEmpty());
+
+        // No extra variable bindings
+        assertTrue(variableBindings.isEmpty());
+
+        final Map<String, Object> formattedVariableBindings = snmpTrapMessage.getFormattedVariableBindings();
+        assertEquals(2, formattedVariableBindings.size());
+        assertEquals("foo", formattedVariableBindings.get("iso.foo"));
+        assertEquals("bar", formattedVariableBindings.get("iso.bar"));
+    }
+
+    @Test
+    void trapShouldProperlyCreateV2cTrapMessage() throws IOException {
+        final PDU pdu = new PDU(PDU.TRAP, List.of(
+                new VariableBinding(new OID("1.1"), new OctetString("foo")),
+                new VariableBinding(new OID("1.2"), new OctetString("bar"))
+        ));
+        pdu.setRequestID(new Integer32(123));
+
+        when(mibManager.map(any(OID.class)))
+                .thenReturn("iso.foo", "iso.bar");
+
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version2c, pdu);
+        assertEquals(SnmpConstants.version2c, snmpTrapMessage.getVersion());
+        assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
+        assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
+
+        final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
+        assertEquals("2c", trapEvent.remove("version"));
+        assertEquals(PDU.getTypeString(pdu.getType()), trapEvent.remove("type"));
+        assertEquals(pdu.getRequestID().getValue(), trapEvent.remove("request_id"));
+        assertEquals(pdu.getErrorStatus(), trapEvent.remove("error_status"));
+        assertEquals(pdu.getErrorStatusText(), trapEvent.remove("error_status_text"));
+        assertEquals(pdu.getErrorIndex(), trapEvent.remove("error_index"));
+        assertEquals(TRAP_SECURITY_NAME, trapEvent.remove("community"));
+
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        pdu.getVariableBindings().forEach(binding -> assertEquals(
+                binding.getVariable().toString(),
+                variableBindings.remove(binding.getOid().toString()))
+        );
+
+        // No extra trap event properties
+        assertTrue(trapEvent.isEmpty());
+
+        // No extra variable bindings
+        assertTrue(variableBindings.isEmpty());
+
+        final Map<String, Object> formattedVariableBindings = snmpTrapMessage.getFormattedVariableBindings();
+        assertEquals(2, formattedVariableBindings.size());
+        assertEquals("foo", formattedVariableBindings.get("iso.foo"));
+        assertEquals("bar", formattedVariableBindings.get("iso.bar"));
+    }
+
+    @Test
+    void trapShouldProperlyCreateV3TrapMessage() throws IOException {
+        final PDU scopedPDU = new PDU(PDU.TRAP, List.of(
+                new VariableBinding(new OID("1.1"), new OctetString("foo")),
+                new VariableBinding(new OID("1.2"), new OctetString("bar"))
+        ));
+        scopedPDU.setRequestID(new Integer32(123));
+
+        when(mibManager.map(any(OID.class)))
+                .thenReturn("iso.foo", "iso.bar");
+
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version3, scopedPDU);
+        assertEquals(SnmpConstants.version3, snmpTrapMessage.getVersion());
+        assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
+        assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
+
+        final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
+        assertEquals("3", trapEvent.remove("version"));
+        assertEquals(PDU.getTypeString(scopedPDU.getType()), trapEvent.remove("type"));
+        assertEquals(scopedPDU.getRequestID().getValue(), trapEvent.remove("request_id"));
+        assertEquals(scopedPDU.getErrorStatus(), trapEvent.remove("error_status"));
+        assertEquals(scopedPDU.getErrorStatusText(), trapEvent.remove("error_status_text"));
+        assertEquals(scopedPDU.getErrorIndex(), trapEvent.remove("error_index"));
+
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        scopedPDU.getVariableBindings().forEach(binding -> assertEquals(
+                binding.getVariable().toString(),
+                variableBindings.remove(binding.getOid().toString()))
+        );
+
+        // No extra trap event properties
+        assertTrue(trapEvent.isEmpty());
+
+        // No extra variable bindings
+        assertTrue(variableBindings.isEmpty());
+
+        final Map<String, Object> formattedVariableBindings = snmpTrapMessage.getFormattedVariableBindings();
+        assertEquals(2, formattedVariableBindings.size());
+        assertEquals("foo", formattedVariableBindings.get("iso.foo"));
+        assertEquals("bar", formattedVariableBindings.get("iso.bar"));
+    }
+
+    private SnmpTrapMessage executeTrapAndGetProducedSnmpTrapMessage(int version, PDU pdu) throws IOException {
+        try (final SnmpClient client = spy(createClient())) {
+            final Snmp snmp = spy(client.getSnmp());
+
+            when(client.getSnmp()).thenReturn(snmp);
+            doNothing().when(snmp).listen();
+
+            final SnmpTrapMessage[] message = new SnmpTrapMessage[1];
+            client.doTrap(new String[0], p -> message[0] = p, new CountDownLatch(0));
+
+            final CommandResponderEvent responderEvent = mock(CommandResponderEvent.class);
+            when(responderEvent.getMessageProcessingModel())
+                    .thenReturn(version);
+
+            when(responderEvent.getPeerAddress())
+                    .thenReturn(TRAP_PEER_ADDRESS);
+
+            when(responderEvent.getSecurityName())
+                    .thenReturn(TRAP_SECURITY_NAME.getBytes());
+
+            when(responderEvent.getPDU())
+                    .thenReturn(pdu);
+
+            // Simulates an incoming trap message
+            snmp.processPdu(responderEvent);
+
+            final SnmpTrapMessage snmpTrapMessage = message[0];
+            assertNotNull(snmpTrapMessage);
+
+            pdu.getVariableBindings().forEach(
+                    binding -> verify(client, times(2)).coerceVariable(binding.getVariable()));
+
+            return snmpTrapMessage;
         }
     }
 

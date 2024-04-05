@@ -39,7 +39,20 @@ final class SnmpUtils {
             case "3":
                 return SnmpConstants.version3;
             default:
-                throw new SnmpClientException(String.format("protocol version '%s' is not supported, expected versions are '1', '2c' and '3'", version));
+                throw new SnmpClientException(String.format("version '%s' is not supported, expected versions are '1', '2c' and '3'", version));
+        }
+    }
+
+    static String parseSnmpVersion(int version) {
+        switch (version) {
+            case SnmpConstants.version1:
+                return "1";
+            case SnmpConstants.version2c:
+                return "2c";
+            case SnmpConstants.version3:
+                return "3";
+            default:
+                return String.valueOf(version);
         }
     }
 
@@ -53,9 +66,9 @@ final class SnmpUtils {
                 return AuthMD5.ID;
             case "sha":
                 return AuthSHA.ID;
-            case "sha2":
             case "hmac128sha224":
                 return AuthHMAC128SHA224.ID;
+            case "sha2":
             case "hmac192sha256":
                 return AuthHMAC192SHA256.ID;
             case "hmac256sha384":
