@@ -33,28 +33,35 @@ Resulting `message` field resembles:
 [id="plugins-{type}s-{plugin}-ecs"]
 ==== Event Metadata and the Elastic Common Schema (ECS)
 
-When ECS <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled, this plugin adds SNMP trap metadata to each event. The value is stored in the @metadata where it can be used by other plugins in your pipeline.
-
-Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>> field.
+Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>>.
+The source host field changes based on <<plugins-{type}s-{plugin}-ecs_compatibility>>.
 
 [cols="<l,<l,e,<e"]
 |=======================================================================
 |ECS disabled |ECS v1, v8    |Availability|Description
 |[host]|[host][ip]|Always|IP address of the host e.g. "192.168.1.11"
-| -|[@metadata][input][snmptrap][pdu][agent_addr]|`SNMPv1`|Network address of the object generating the trap
-| -|[@metadata][input][snmptrap][pdu][community]|`SNMPv1` `SNMPv2c`|SNMP community
-| -|[@metadata][input][snmptrap][pdu][enterprise]|`SNMPv1`|Type of object generating the trap
-| -|[@metadata][input][snmptrap][pdu][error_index]|`SNMPv2c` `SNMPv3`|Provides additional information by identifying
+|=======================================================================
+
+This plugin also adds the trap PDU metadata to each event.
+The value is stored in the `@metadata` where it can be used by other plugins in the pipeline.
+
+[cols="<l,e,<e"]
+|=======================================================================
+|ECS disabled, v1, v8 |Availability|Description
+|[@metadata][input][snmptrap][pdu][agent_addr]|`SNMPv1`|Network address of the object generating the trap
+|[@metadata][input][snmptrap][pdu][community]|`SNMPv1` `SNMPv2c`|SNMP community
+|[@metadata][input][snmptrap][pdu][enterprise]|`SNMPv1`|Type of object generating the trap
+|[@metadata][input][snmptrap][pdu][error_index]|`SNMPv2c` `SNMPv3`|Provides additional information by identifying
 which variable binding in the list caused the error
-| -|[@metadata][input][snmptrap][pdu][error_status]|`SNMPv2c` `SNMPv3`|Error status code
-| -|[@metadata][input][snmptrap][pdu][error_status_text]|`SNMPv2c` `SNMPv3`|Error status code description
-| -|[@metadata][input][snmptrap][pdu][generic_trap]|`SNMPv1`|Generic trap type
-| -|[@metadata][input][snmptrap][pdu][request_id]|`SNMPv2c` `SNMPv3`|Request ID
-| -|[@metadata][input][snmptrap][pdu][specific_trap]|`SNMPv1`|Specific code, presented even if the generic_trap is not enterprise specific
-| -|[@metadata][input][snmptrap][pdu][timestamp]|`SNMPv1`|Time elapsed between the last (re)initialization of the network entity and the generation of the trap
-| -|[@metadata][input][snmptrap][pdu][type]|Always|PDU type
-| -|[@metadata][input][snmptrap][pdu][variable_bindings]|Always|SNMP variable bindings values
-| -|[@metadata][input][snmptrap][pdu][version]|Always|SNMP version
+|[@metadata][input][snmptrap][pdu][error_status]|`SNMPv2c` `SNMPv3`|Error status code
+|[@metadata][input][snmptrap][pdu][error_status_text]|`SNMPv2c` `SNMPv3`|Error status code description
+|[@metadata][input][snmptrap][pdu][generic_trap]|`SNMPv1`|Generic trap type
+|[@metadata][input][snmptrap][pdu][request_id]|`SNMPv2c` `SNMPv3`|Request ID
+|[@metadata][input][snmptrap][pdu][specific_trap]|`SNMPv1`|Specific code, presented even if the generic_trap is not enterprise specific
+|[@metadata][input][snmptrap][pdu][timestamp]|`SNMPv1`|Time elapsed between the last (re)initialization of the network entity and the generation of the trap
+|[@metadata][input][snmptrap][pdu][type]|Always|PDU type
+|[@metadata][input][snmptrap][pdu][variable_bindings]|Always|SNMP variable bindings values
+|[@metadata][input][snmptrap][pdu][version]|Always|SNMP version
 |=======================================================================
 
 [id="plugins-{type}s-{plugin}-import-mibs"]
@@ -202,7 +209,7 @@ on SNMP over TCP, please refer to the https://datatracker.ietf.org/doc/html/rfc3
   * Default value is `["1", "2c"]`
 
 The supported SNMP protocol versions to listen on.
-SNMP messages received, which version is unsupported/disabled, are automatically discarded.
+SNMP messages for versions that are either unsupported and/or disabled are automatically discarded.
 
 [id="plugins-{type}s-{plugin}-target"]
 ===== `target`
