@@ -3,6 +3,7 @@ package org.logstash.snmp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.snmp4j.Target;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 
 import java.io.IOException;
@@ -90,7 +91,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             this.executor = executor;
         }
 
-        public void get(Target target, OID[] oids) {
+        public void get(Target<Address> target, OID[] oids) {
             submitRequestTask(target, "get", oids, Map.of(), () -> {
                 try {
                     return client.get(target, oids);
@@ -100,15 +101,15 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             });
         }
 
-        public void walk(Target target, OID oid) {
+        public void walk(Target<Address> target, OID oid) {
             submitRequestTask(target, "walk", new OID[]{oid}, Map.of(), () -> client.walk(target, oid));
         }
 
-        public void table(Target target, String tableName, OID[] oids) {
+        public void table(Target<Address> target, String tableName, OID[] oids) {
             submitRequestTask(target, "table", oids, Map.of("table_name", tableName), () -> client.table(target, tableName, oids));
         }
 
-        private void submitRequestTask(Target target, String operation, OID[] oids, Map<String, String> extraLogDetails, Supplier<Map<String, ?>> task) {
+        private void submitRequestTask(Target<Address> target, String operation, OID[] oids, Map<String, String> extraLogDetails, Supplier<Map<String, ?>> task) {
             final Supplier<Map<String, String>> logPropertiesSupplier = () -> createLogDetails(target, oids, extraLogDetails);
 
             final CompletableFuture<Map<String, ?>> future = CompletableFuture.supplyAsync(task, executor)
@@ -130,6 +131,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private Map<String, ?> handleRequestException(String operation, Throwable ex, Supplier<Map<String, String>> logPropertiesSupplier) {
             final Throwable throwable = isWrapperException(ex) && ex.getCause() != null ? ex.getCause() : ex;
             logger.error("error invoking `{}` operation, ignoring. {}", operation, logPropertiesSupplier.get(), throwable);
+            // Should return null (instead of empty), so it can be differentiated on the #handleRequestData from an empty response
             return null;
         }
 
@@ -137,7 +139,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             return throwable instanceof CompletionException;
         }
 
-        static Map<String, String> createLogDetails(Target target, OID[] oids, Map<String, String> extraDetails) {
+        static Map<String, String> createLogDetails(Target<Address> target, OID[] oids, Map<String, String> extraDetails) {
             final Map<String, String> map = new HashMap<>(extraDetails);
             map.putIfAbsent("host", String.valueOf(target.getAddress()));
             map.putIfAbsent("oids", Arrays.toString(oids));
