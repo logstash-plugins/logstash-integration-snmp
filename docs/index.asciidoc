@@ -30,7 +30,7 @@ The SNMP Integration Plugin provides integrated plugins for working with SNMP:
 [id="plugins-{type}s-{plugin}-import-mibs"]
 ==== Importing MIBs
 
-The SNMP plugins already includes the IETF MIBs (management information bases) and these do not need to be imported.
+The SNMP plugins already include the IETF MIBs (management information bases) and these do not need to be imported.
 To disable the bundled MIBs set the `use_provided_mibs` option to `false`.
 
 Any other MIB will need to be manually imported to provide mapping of the numeric OIDs to MIB field names in the resulting event.
