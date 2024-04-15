@@ -348,7 +348,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
       super().merge({
         'get' => %w[1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.7.0 1.3.6.1.2.1.1.5.0],
         'oid_mapping_format' => 'ruby_snmp',
-        'hosts' => [{ 'host' => 'udp:snmp1/161', 'version' => '2c', 'community' => 'public' }]
+        'hosts' => [{ 'host' => 'tcp:snmp1/161', 'version' => '2c', 'community' => 'public' }]
       })
     end
 
