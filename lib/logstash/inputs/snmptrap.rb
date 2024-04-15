@@ -110,6 +110,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
         .builder(mib_manager, @supported_transports.to_set, @port)
         .setSupportedVersions(@supported_versions.to_set)
         .setThreadPoolName('SnmpTrapWorker')
+        .setMapOidVariableValues(@oid_map_field_values)
         .build
   end
 

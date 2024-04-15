@@ -152,6 +152,10 @@ describe 'SNMP input plugins' do
     it 'should default `oid_mapping_format` to `default`' do
       expect(plugin.config['oid_mapping_format']).to eql('default')
     end
+
+    it 'should default `oid_map_field_values` to `false`' do
+      expect(plugin.config['oid_map_field_values']).to eql(false)
+    end
   end
 
   describe LogStash::Inputs::Snmptrap do
@@ -163,6 +167,10 @@ describe 'SNMP input plugins' do
 
     it 'should default `oid_mapping_format` to `ruby_snmp`' do
       expect(plugin.config['oid_mapping_format']).to eql('ruby_snmp')
+    end
+
+    it 'should default `oid_map_field_values` to `true`' do
+      expect(plugin.config['oid_map_field_values']).to  eql(true)
     end
   end
 end

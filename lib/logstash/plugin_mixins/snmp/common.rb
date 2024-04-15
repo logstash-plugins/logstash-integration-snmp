@@ -46,13 +46,17 @@ module LogStash
           # 1.3.6.1.2.1.1.2.0 -> 1.3.6.1.2.1.1.2.0
           base.config :oid_mapping_format, :validate => %w[default ruby_snmp dotted_string], :default => default_oid_mapping_format(base)
 
-          # number of OID root digits to ignore in event field name. For example, in a numeric OID
+          # Defines if the Logstash event field values, which types are `OID`, are mapped using the configured OID textual representation
+          # set on the `oid_mapping_format`.
+          base.config :oid_map_field_values, :validate => :boolean, :default => default_oid_map_field_values(base)
+
+          # Number of OID root digits to ignore in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting oid_root_skip => 5
           # which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
           # as "1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
           base.config :oid_root_skip, :validate => :number, :default => 0
 
-          # number of OID tail digits to retain in event field name. For example, in a numeric OID
+          # Number of OID tail digits to retain in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the last 2 digits could be retained by setting oid_path_length => 2
           # which would result in a field name "1.0". Similarly, when a MIB is used an OID such as
           # "1.3.6.1.2.mib-2.system.sysDescr.0" would become "sysDescr.0"
@@ -74,6 +78,10 @@ module LogStash
 
         def self.default_use_provided_mibs(base)
           !snmptrap_plugin?(base)
+        end
+
+        def self.default_oid_map_field_values(base)
+          snmptrap_plugin?(base)
         end
 
         def build_mib_manager!

@@ -80,6 +80,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SnmpClientTest {
@@ -782,6 +783,27 @@ class SnmpClientTest {
                     "error: unable to read variable value. Syntax: 4 (OCTET STRING)",
                     client.coerceVariable(erroredVariable)
             );
+        }
+    }
+
+    @Test
+    void coerceVariableShouldNotMapOidVariableValueByDefault() throws IOException {
+        try (SnmpClient client = createClient()) {
+            assertEquals("1.1", client.coerceVariable(new OID("1.1")));
+            verifyNoInteractions(mibManager);
+        }
+    }
+
+    @Test
+    void coerceVariableShouldMapOidVariableValueWhenTrue() throws IOException {
+        try (SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setMapOidVariableValues(true)
+                .build()) {
+
+            when(mibManager.map(any(OID.class)))
+                    .thenReturn("foo.bar");
+
+            assertEquals("foo.bar", client.coerceVariable(new OID("1.1")));
         }
     }
 
