@@ -372,6 +372,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
     plugin.register if register
     Thread.new do
       poll_clients_latch.wait(timeout)
+    ensure
       plugin.do_close
       plugin.do_stop
     end
