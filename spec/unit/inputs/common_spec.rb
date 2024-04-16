@@ -154,6 +154,7 @@ shared_examples 'a common SNMP plugin' do
 
         it 'should set builder value' do
           expect(client_builder).to receive(:setLocalEngineId).with(local_engine_id)
+          expect(client_builder).to receive(:setMapOidVariableValues)
           expect(client_builder).to receive(:build)
           expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to_not raise_error
         end
@@ -191,6 +192,7 @@ shared_examples 'a common SNMP plugin' do
 
         it 'should not raise' do
           expect(client_builder).to receive(:addUsmUser)
+          expect(client_builder).to receive(:setMapOidVariableValues)
           expect(client_builder).to receive(:build)
           expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
         end
@@ -221,6 +223,7 @@ shared_examples 'a common SNMP plugin' do
 
           it 'should not raise' do
             expect(client_builder).to receive(:addUsmUser)
+            expect(client_builder).to receive(:setMapOidVariableValues)
             expect(client_builder).to receive(:build)
             expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
           end
@@ -231,6 +234,7 @@ shared_examples 'a common SNMP plugin' do
 
           it 'should not raise' do
             expect(client_builder).to receive(:addUsmUser)
+            expect(client_builder).to receive(:setMapOidVariableValues)
             expect(client_builder).to receive(:build)
             expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
           end
@@ -280,6 +284,10 @@ describe 'SNMP input plugins' do
     it 'should default `oid_mapping_format` to `default`' do
       expect(plugin.config['oid_mapping_format']).to eql('default')
     end
+
+    it 'should default `oid_map_field_values` to `false`' do
+      expect(plugin.config['oid_map_field_values']).to eql(false)
+    end
   end
 
   describe LogStash::Inputs::Snmptrap do
@@ -291,6 +299,10 @@ describe 'SNMP input plugins' do
 
     it 'should default `oid_mapping_format` to `ruby_snmp`' do
       expect(plugin.config['oid_mapping_format']).to eql('ruby_snmp')
+    end
+
+    it 'should default `oid_map_field_values` to `true`' do
+      expect(plugin.config['oid_map_field_values']).to  eql(true)
     end
   end
 end

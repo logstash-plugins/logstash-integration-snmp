@@ -18,6 +18,8 @@ module LogStash
         MIB_PROVIDED_PATHS = [::File.join(MIB_BASE_PATH, 'logstash'), ::File.join(MIB_BASE_PATH, 'ietf')].map { |path| ::File.expand_path(path) }
 
         def self.included(base)
+          # Common configuration supported by all SNMP plugins
+
           # This plugin provides sets of MIBs publicly available. The full paths to these provided MIBs paths
           # Will be displayed at plugin startup.
           base.config :use_provided_mibs, :validate => :boolean, :default => default_use_provided_mibs(base)
@@ -46,13 +48,17 @@ module LogStash
           # 1.3.6.1.2.1.1.2.0 -> 1.3.6.1.2.1.1.2.0
           base.config :oid_mapping_format, :validate => %w[default ruby_snmp dotted_string], :default => default_oid_mapping_format(base)
 
-          # number of OID root digits to ignore in event field name. For example, in a numeric OID
+          # Defines if the Logstash event field values, which types are `OID`, are mapped using the configured OID textual representation
+          # set on the `oid_mapping_format`.
+          base.config :oid_map_field_values, :validate => :boolean, :default => default_oid_map_field_values(base)
+
+          # Number of OID root digits to ignore in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting oid_root_skip => 5
           # which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
           # as "1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
           base.config :oid_root_skip, :validate => :number, :default => 0
 
-          # number of OID tail digits to retain in event field name. For example, in a numeric OID
+          # Number of OID tail digits to retain in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the last 2 digits could be retained by setting oid_path_length => 2
           # which would result in a field name "1.0". Similarly, when a MIB is used an OID such as
           # "1.3.6.1.2.mib-2.system.sysDescr.0" would become "sysDescr.0"
@@ -97,14 +103,16 @@ module LogStash
         def build_mib_manager!
           mib_manager = new_mib_manager
 
-          @mib_paths&.each do |path|
-            logger.info("Using user provided MIB path #{path}")
-            mib_manager.add(path)
+          if @mib_paths&.any?
+            logger.info('Loading user-provided MIB files', :path => @mib_paths)
+            @mib_paths.each do |path|
+              mib_manager.add(path)
+            end
           end
 
           if @use_provided_mibs
+            logger.info('Loading provided MIB files', :path => MIB_PROVIDED_PATHS)
             MIB_PROVIDED_PATHS.each do |path|
-              logger.info("Using plugin provided MIB path #{path}")
               mib_manager.add(path)
             end
           end
@@ -120,6 +128,7 @@ module LogStash
             client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
           end
 
+          client_builder.setMapOidVariableValues(@oid_map_field_values)
           client_builder.setLocalEngineId(@local_engine_id) unless @local_engine_id.nil?
           client_builder.build
         end
@@ -224,6 +233,12 @@ module LogStash
         end
 
         private_class_method :default_use_provided_mibs
+
+        def self.default_oid_map_field_values(base)
+          snmptrap_plugin?(base)
+        end
+
+        private_class_method :default_oid_map_field_values
       end
     end
   end
