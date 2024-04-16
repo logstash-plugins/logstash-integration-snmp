@@ -27,6 +27,7 @@ public final class SnmpClientBuilder {
     private final List<UsmUser> usmUsers = new ArrayList<>();
     private int threadPoolSize = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private String threadPoolName = "SnmpWorker";
+    private boolean mapOidVariableValues = false;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -86,6 +87,11 @@ public final class SnmpClientBuilder {
         return this;
     }
 
+    public SnmpClientBuilder setMapOidVariableValues(final boolean mapOidVariableValues) {
+        this.mapOidVariableValues = mapOidVariableValues;
+        return this;
+    }
+
     public SnmpClient build() throws IOException {
         return new SnmpClient(
                 mib,
@@ -96,7 +102,8 @@ public final class SnmpClientBuilder {
                 threadPoolName,
                 threadPoolSize,
                 usmUsers,
-                localEngineId
+                localEngineId,
+                mapOidVariableValues
         );
     }
 }

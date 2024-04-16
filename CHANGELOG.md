@@ -14,6 +14,7 @@
   - Standardized the `logstash-input-snmp` and `logstash-input-snmptrap` settings, supported MIB formats and features.
     - Both plugins now support .dic (`libsmi`) and .yaml (`ruby-snmp`) MIB formats.
     - Added the `oid_mapping_format` option to configure how the OID field is mapped in the Logstash event.
+    - Added the `oid_map_field_values` option to enable/disable OID field values mapping. 
     - The `logstash-input-snmptrap` now supports the `logstash-input-snmp` features: `mib_paths`, `use_provided_mibs`, `oid_root_skip`, `oid_path_length`.
   - The `logstash-input-snmptrap` `yamlmibdir` was deprecated in favor of `mib_paths`.
   - Updated the `logstash-input-snmptrap` docs to include the same `logstash-input-snmp` instructions on how importing MIB files.

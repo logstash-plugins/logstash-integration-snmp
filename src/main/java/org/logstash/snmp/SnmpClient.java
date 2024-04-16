@@ -69,10 +69,15 @@ import static org.logstash.snmp.SnmpUtils.parseSnmpVersion;
 
 public class SnmpClient implements Closeable {
     private static final Logger logger = LogManager.getLogger(SnmpClient.class);
+
     private final MibManager mib;
     private final Snmp snmp;
+    private final Set<String> supportedTransports;
     private final Set<Integer> supportedVersions;
     private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
+    private final String host;
+    private final int port;
+    private final boolean mapOidVariableValues;
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
@@ -91,10 +96,15 @@ public class SnmpClient implements Closeable {
             String threadPoolName,
             int threadPoolSize,
             List<UsmUser> users,
-            OctetString localEngineId
+            OctetString localEngineId,
+            boolean mapOidVariableValues
     ) throws IOException {
         this.mib = mib;
+        this.host = host;
+        this.port = port;
         this.supportedVersions = supportedVersions;
+        this.supportedTransports = supportedTransports;
+        this.mapOidVariableValues = mapOidVariableValues;
 
         // global security models/protocols
         SecurityProtocols.getInstance().addDefaultProtocols();
@@ -221,7 +231,11 @@ public class SnmpClient implements Closeable {
         });
 
         getSnmp().listen();
-        logger.info("SNMP trap receiver started.");
+
+        if (logger.isInfoEnabled()) {
+            final String[] versions = supportedVersions.stream().map(SnmpUtils::parseSnmpVersion).toArray(String[]::new);
+            logger.info("SNMP trap receiver started on host: {}, port: {}, transports: {}, versions: {}.", host, port, supportedTransports, versions);
+        }
 
         try {
             stopCountDownLatch.await();
@@ -421,6 +435,11 @@ public class SnmpClient implements Closeable {
         // Integer32
         if (variable instanceof AssignableFromInteger) {
             return variable.toInt();
+        }
+
+        // OIDs values
+        if (mapOidVariableValues && variable instanceof OID) {
+            return mib.map((OID) variable);
         }
 
         try {
