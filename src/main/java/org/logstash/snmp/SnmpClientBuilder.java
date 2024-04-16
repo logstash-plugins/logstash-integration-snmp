@@ -29,6 +29,7 @@ public final class SnmpClientBuilder {
     private int messageDispatcherPoolSize = 1;
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
     private Duration closeTimeoutDuration;
+    private boolean mapOidVariableValues = false;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -93,6 +94,11 @@ public final class SnmpClientBuilder {
         return this;
     }
 
+    public SnmpClientBuilder setMapOidVariableValues(final boolean mapOidVariableValues) {
+        this.mapOidVariableValues = mapOidVariableValues;
+        return this;
+    }
+
     public SnmpClient build() throws IOException {
         final SnmpClient client = new SnmpClient(
                 mib,
@@ -103,7 +109,8 @@ public final class SnmpClientBuilder {
                 messageDispatcherPoolName,
                 messageDispatcherPoolSize,
                 usmUsers,
-                localEngineId
+                localEngineId,
+                mapOidVariableValues
         );
 
         if (closeTimeoutDuration != null) {
