@@ -33,9 +33,8 @@ Resulting `message` field resembles:
 [id="plugins-{type}s-{plugin}-ecs"]
 ==== Event Metadata and the Elastic Common Schema (ECS)
 
-When ECS <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled, this plugin adds SNMP trap metadata to each event. The value is stored in the @metadata where it can be used by other plugins in your pipeline.
-
-Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>> field.
+Because SNMP data has specific field names based on OIDs, we recommend setting a <<plugins-{type}s-{plugin}-target>>.
+The source host field changes based on <<plugins-{type}s-{plugin}-ecs_compatibility>>.
 
 [cols="<l,<l,e,<e"]
 |=======================================================================
