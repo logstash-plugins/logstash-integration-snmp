@@ -9,9 +9,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -39,9 +42,15 @@ public class MibManager {
 
     public void add(String path) throws IOException {
         try (final Stream<Path> allFilesMib = Files.walk(Path.of(path))) {
-            final Map<String, List<Path>> filesPerExtension = allFilesMib
+            // Due to the OID overrides, it should group the files sorted by path, so the
+            // map results are deterministic, independently of OS and path walk order.
+            final Map<String, Collection<Path>> filesPerExtension = allFilesMib
                     .filter(Files::isRegularFile)
-                    .collect(Collectors.groupingBy(FileUtils::getFileExtension));
+                    .collect(Collectors.groupingBy(
+                            FileUtils::getFileExtension,
+                            HashMap::new,
+                            Collectors.toCollection(TreeSet::new))
+                    );
 
             filesPerExtension.forEach((extension, files) -> {
                 if (mibFileReaders.containsKey(extension)) {
