@@ -2,7 +2,13 @@ require 'logstash/devutils/rspec/spec_helper'
 require 'logstash/inputs/snmp'
 
 describe LogStash::Inputs::Snmp, :integration => true do
-  let(:config) { {} }
+  let(:mib_paths) do
+    [
+      ::File.join(LogStash::Inputs::Snmp::MIB_BASE_PATH, 'ietf', 'SNMPv2-SMI.dic'),
+      ::File.join(LogStash::Inputs::Snmp::MIB_BASE_PATH, 'ietf', 'SNMPv2-MIB.dic'),
+    ].map { |path| ::File.expand_path(path) }
+  end
+  let(:config) { { 'mib_paths' => mib_paths, 'use_provided_mibs' => false } }
   let(:plugin) { LogStash::Inputs::Snmp.new(config) }
 
   shared_examples 'snmp plugin return one udp event and one tcp event' do |config|
@@ -222,7 +228,8 @@ describe LogStash::Inputs::Snmp, :integration => true do
     let(:config) do
       super().merge(
         'get' => %w[1.3.6.1.2.1.1.1.0],
-        'hosts' => [{ 'host' => 'udp:snmp1/161', 'community' => 'public' }, { 'host' => 'tcp:snmp1/161', 'community' => 'public' }]
+        'hosts' => [{ 'host' => 'udp:snmp1/161', 'community' => 'public' }, { 'host' => 'tcp:snmp1/161', 'community' => 'public' }],
+        'ecs_compatibility' => 'disabled'
       )
     end
 
@@ -238,7 +245,8 @@ describe LogStash::Inputs::Snmp, :integration => true do
     let(:config) do
       super().merge({
         'get' => %w[1.3.6.1.2.1.1.1.0],
-        'hosts' => [{ 'host' => 'udp:snmp1/161', 'community' => 'public' }, { 'host' => 'udp:snmp2/162', 'community' => 'public' }]
+        'hosts' => [{ 'host' => 'udp:snmp1/161', 'community' => 'public' }, { 'host' => 'udp:snmp2/162', 'community' => 'public' }],
+        'ecs_compatibility' => 'disabled'
       })
     end
 
@@ -257,8 +265,8 @@ describe LogStash::Inputs::Snmp, :integration => true do
     let(:plugin2) { LogStash::Inputs::Snmp.new(config2) }
 
     it 'should return two events, one per host' do
-      queue = run_plugin_and_get_queue(plugin)
-      queue2 = run_plugin_and_get_queue(plugin2)
+      queue = run_plugin_and_get_queue(plugin, timeout: 60)
+      queue2 = run_plugin_and_get_queue(plugin2, timeout: 60)
       hosts = [queue.pop, queue2.pop].map { |event| event.get('host') }.sort
       expect(hosts).to eq(%w[snmp1 snmp2])
     end
@@ -325,7 +333,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
     end
   end
 
-  describe 'single input plugin with oid_mapping_format => dotted_string' do
+  context 'with oid_mapping_format => dotted_string' do
     let(:config) do
       super().merge({
         'get' => %w[1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.7.0 1.3.6.1.2.1.1.5.0],
@@ -343,7 +351,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
     end
   end
 
-  describe 'single input plugin with oid_mapping_format => ruby_snmp' do
+  context 'with oid_mapping_format => ruby_snmp' do
     let(:config) do
       super().merge({
         'get' => %w[1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.7.0 1.3.6.1.2.1.1.5.0],
@@ -361,6 +369,56 @@ describe LogStash::Inputs::Snmp, :integration => true do
     end
   end
 
+  context 'with use_provided_mibs => true' do
+    let(:config) do
+      super().merge({
+        'hosts' => [{ 'host' => "tcp:snmp1/161", 'version' => '2c' }],
+        'get' => ['1.3.6.1.2.1.1.1.0'],
+        'use_provided_mibs' => true,
+        'mib_paths' => []
+      })
+    end
+
+    it 'should have OID fields mapped' do
+      event = run_plugin_and_get_queue(plugin).pop
+      expect(event).to be_a(LogStash::Event)
+      expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to be_a String
+    end
+  end
+
+  context 'with oid_map_field_values' do
+    let(:oid_map_field_values) { true }
+    let(:config) do
+      super().merge({
+        'hosts' => [{ 'host' => "tcp:snmp1/161", 'version' => '2c' }],
+        'get' => ['1.3.6.1.2.1.1.2.0'],
+        'use_provided_mibs' => true,
+        'mib_paths' => [],
+        'oid_map_field_values' => oid_map_field_values
+      })
+    end
+
+    context 'set to false' do
+      let(:oid_map_field_values) { false }
+
+      it 'should not map OID field values' do
+        event = run_plugin_and_get_queue(plugin).pop
+        expect(event).to be_a(LogStash::Event)
+        expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0')).to eq('1.3.6.1.4.1.8072.3.2.10')
+      end
+    end
+
+    context 'set to true' do
+      let(:oid_map_field_values) { true }
+
+      it 'should map OID field values' do
+        event = run_plugin_and_get_queue(plugin).pop
+        expect(event).to be_a(LogStash::Event)
+        expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0')).to eq('iso.org.dod.internet.private.enterprises.8072.3.2.10')
+      end
+    end
+  end
+
   def run_plugin_and_get_queue(plugin, timeout: 30, register: true)
     poll_clients_latch = Concurrent::CountDownLatch.new(1)
 
@@ -371,7 +429,8 @@ describe LogStash::Inputs::Snmp, :integration => true do
 
     plugin.register if register
     Thread.new do
-      poll_clients_latch.wait(timeout)
+      unless poll_clients_latch.wait(timeout)
+      end
     ensure
       plugin.do_close
       plugin.do_stop

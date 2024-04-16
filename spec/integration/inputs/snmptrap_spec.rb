@@ -3,9 +3,10 @@ require 'logstash/inputs/snmptrap'
 require 'logstash-integration-snmp_jars'
 require 'timeout'
 
-describe LogStash::Inputs::Snmptrap do
+describe LogStash::Inputs::Snmptrap, :integration => true do
 
   java_import 'org.logstash.snmp.SnmpTestTrapSender'
+  java_import 'org.snmp4j.smi.OID'
 
   PDU_METADATA = '[@metadata][input][snmptrap][pdu]'
 
@@ -233,6 +234,64 @@ describe LogStash::Inputs::Snmptrap do
         end.pop
 
         expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('1.0')
+      end
+    end
+
+    context 'with oid_map_field_values' do
+      context 'set to false' do
+        let(:config) { super().merge('oid_map_field_values' => false) }
+
+        it 'should not map OID field values' do
+          event = run_plugin_and_get_queue(plugin) do
+            @trap_sender.send_trap_v2c(target_address, 'public', { '1.3.6.1.2.1.1.2.0' => org.snmp4j.smi.OID.new('1.3.6.1.4.1.8072.3.2.10') })
+          end.pop
+
+          expect(event).to be_a(LogStash::Event)
+          expect(event.get('SNMPv2-MIB::sysObjectID.0')).to eq('1.3.6.1.4.1.8072.3.2.10')
+        end
+      end
+
+      context 'set to true' do
+        let(:config) { super().merge('oid_map_field_values' => true) }
+
+        it 'should map OID field values' do
+          event = run_plugin_and_get_queue(plugin) do
+            @trap_sender.send_trap_v2c(target_address, 'public', { '1.3.6.1.2.1.1.2.0' => org.snmp4j.smi.OID.new('1.3.6.1.4.1.8072.3.2.10') })
+          end.pop
+
+          expect(event).to be_a(LogStash::Event)
+          expect(event.get('SNMPv2-MIB::sysObjectID.0')).to eq('SNMPv2-SMI::enterprises.8072.3.2.10')
+        end
+      end
+    end
+
+    context 'with no MIBs provided' do
+      let(:config) { super().reject { |key, _| key == 'mib_paths' }.merge('use_provided_mibs' => false) }
+
+      it 'should load default ruby-snmp MIBs' do
+        event = run_plugin_and_get_queue(plugin) do
+          bindings = {
+            '1.3.6.1.2.1.1.2.0' => 'SNMPv2-SMI.dic',
+            '1.3' => 'SNMPv2-MIB.dic',
+            '1.3.6.1.2.1.2.1' => 'IF-MIB.dic',
+            '1.3.6.1.2.1.4' => 'IP-MIB.dic',
+            '1.3.6.1.2.1.6' => 'TCP-MIB.dic',
+            '1.3.6.1.2.1.7.1' => 'UDP-MIB.dic',
+            # non-default ACCOUNTING-CONTROL-MIB::accountingControlMIB
+            '1.3.6.1.2.1.60' => 'ACCOUNTING-CONTROL-MIB.dic'
+          }
+
+          @trap_sender.send_trap_v2c(target_address, 'public', bindings)
+        end.pop
+
+        expect(event).to be_a(LogStash::Event)
+        expect(event.get('SNMPv2-SMI::org')).to_not be_nil
+        expect(event.get('SNMPv2-MIB::sysObjectID.0')).to_not be_nil
+        expect(event.get('IF-MIB::ifNumber')).to_not be_nil
+        expect(event.get('IP-MIB::ip')).to_not be_nil
+        expect(event.get('TCP-MIB::tcp')).to_not be_nil
+        expect(event.get('UDP-MIB::udpInDatagrams')).to_not be_nil
+        expect(event.get('SNMPv2-SMI::mib-2.60')).to_not be_nil
       end
     end
   end
