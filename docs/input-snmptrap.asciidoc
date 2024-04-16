@@ -64,6 +64,12 @@ which variable binding in the list caused the error
 |[@metadata][input][snmptrap][pdu][version]|Always|SNMP version
 |=======================================================================
 
+[id="plugins-{type}s-{plugin}-import-mibs"]
+==== Importing MIBs
+
+This plugin already includes the IETF MIBs (management information bases) and these do not need to be imported.
+Any other MIB will need to be manually imported following the {logstash-ref}/plugins-integrations-snmp.html[Importing MIBs] guideline.
+
 [id="plugins-{type}s-{plugin}-options"]
 ==== SNMP Trap Input Configuration Options
 
@@ -75,11 +81,17 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-community>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
+| <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
+| <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|Yes
+| <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-oid_root_skip>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-port>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-supported_transports>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-supported_versions>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
-| <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-use_provided_mibs>> |<<boolean,boolean>>|No
+| <<plugins-{type}s-{plugin}-yamlmibdir>> |<<string,string>>|__Deprecated__
 |=======================================================================
 
 Also see <<plugins-{type}s-{plugin}-common-options>> for a list of options supported by all
@@ -115,6 +127,69 @@ Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (E
   * Default value is `"0.0.0.0"`
 
 The address to listen on
+
+[id="plugins-{type}s-{plugin}-mib_paths"]
+===== `mib_paths`
+
+  * Value type is <<path,path>>
+  * There is no default value for this setting
+
+The `mib_paths` option specifies the location of one or more imported MIB files.
+The value can be either a dir path containing the imported MIB (`.dic`, `.yaml`) files or a
+file path to a single MIB file.
+
+[id="plugins-{type}s-{plugin}-oid_mapping_format"]
+===== `oid_mapping_format`
+
+  * Value can be any of: `default`, `ruby_snmp`, `dotted_string`
+  * Default value is `"ruby_snmp"`
+
+Defines the mapping textual representation of an OID in the Logstash event:
+* `default` translates every identifier, using the MIBs resolved names, separated by dots. Example:
+`1.3.6.1.2.1.1.2.0` is mapped as `iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0`
+* `ruby_snmp` produces field names prefixed by the MIBs module name, followed by the latest resolved identifier name and unknowns values. Example:
+`1.3.6.1.2.1.1.2.0` is mapped as `SNMPv2-MIB::sysObjectID.0`.
+* `dotted_string` maps fields using the standard dotted string representation, Example:
+`1.3.6.1.2.1.1.2.0` is mapped as  `1.3.6.1.2.1.1.2.0`
+
+[id="plugins-{type}s-{plugin}-oid_map_field_values"]
+===== `oid_map_field_values`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+Defines if the Logstash event fields values, which types are `OID`, are mapped using the configured OID textual representation
+set on the <<plugins-{type}s-{plugin}-oid_mapping_format>> option.
+
+[id="plugins-{type}s-{plugin}-oid_root_skip"]
+===== `oid_root_skip`
+
+  * Value type is <<number,number>>
+  * Default value is `0`
+
+The `oid_root_skip` option specifies the number of OID root digits to ignore in the event field name.
+For example, in a numeric OID like "1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting `oid_root_skip => 5`
+which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
+"1.3.6.1.2.mib-2.system.sysDescr.0" would become "mib-2.system.sysDescr.0"
+
+[NOTE]
+* You can use this setting or <<plugins-{type}s-{plugin}-oid_path_length>>, but not both at the same time.
+* Use this setting only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
+
+[id="plugins-{type}s-{plugin}-oid_path_length"]
+===== `oid_path_length`
+
+  * Value type is <<number,number>>
+  * Default value is `0`
+
+The `oid_path_length` option specifies the number of OID root digits to retain in the event field name.
+For example, in a numeric OID like "1.3.6.1.2.1.1.1.0" the last 2 digits could be retained by setting `oid_path_length => 2`
+which would result in a field name "1.0". Similarly when a MIB is used an OID such
+"1.3.6.1.2.mib-2.system.sysDescr.0" would become "sysDescr.0"
+
+[NOTE]
+* You can use this setting or <<plugins-{type}s-{plugin}-oid_root_skip>>, but not both at the same time.
+* Use this setting only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
 
 [id="plugins-{type}s-{plugin}-port"]
 ===== `port` 
@@ -157,15 +232,23 @@ If not specified data will be stored in the root of the event.
 
 Setting a target is recommended when <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled.
 
+[id="plugins-{type}s-{plugin}-use_provided_mibs"]
+===== `use_provided_mibs`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+This plugin provides all IETF MIBs (management information bases), publicly available in the https://www.ibr.cs.tu-bs.de/projects/libsmi[libsmi] version `0.5.0`.
+When enabled, it automatically loads the bundled MIBs and provides mapping of the numeric OIDs to MIB field names in the resulting event.
+
 [id="plugins-{type}s-{plugin}-yamlmibdir"]
 ===== `yamlmibdir` 
+deprecated[4.0.0, Replaced by <<plugins-{type}s-{plugin}-mib_paths>>]
 
   * Value type is <<string,string>>
   * There is no default value for this setting.
 
 directory of YAML MIB maps  (same format ruby-snmp uses)
-
-
 
 [id="plugins-{type}s-{plugin}-common-options"]
 include::{include_path}/{type}.asciidoc[]

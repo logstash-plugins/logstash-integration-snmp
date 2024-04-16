@@ -30,6 +30,7 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency 'logstash-mixin-ecs_compatibility_support', '~>1.3'
   s.add_runtime_dependency "logstash-mixin-validator_support", '~> 1.0'
   s.add_runtime_dependency "logstash-mixin-event_support", '~> 1.0'
+  s.add_runtime_dependency 'logstash-mixin-normalize_config_support', '~>1.0'
   s.add_runtime_dependency 'logstash-codec-plain'
   # Restrict use of this plugin to versions of Logstash where support for integration plugins is present.
   s.add_runtime_dependency "logstash-core", ">= 6.5.0"
