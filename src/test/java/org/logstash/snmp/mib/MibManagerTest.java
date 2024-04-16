@@ -2,25 +2,33 @@ package org.logstash.snmp.mib;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.logstash.snmp.OidFieldMapper;
 import org.logstash.snmp.Resources;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.snmp4j.smi.OID;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,6 +88,29 @@ class MibManagerTest {
 
         verify(oidTrie)
                 .insert(eq(isoOid), argThat(p -> "iso".equals(p.getName())));
+    }
+
+
+    @Test
+    void addShouldReadFilesInOrder(@TempDir Path tempDir) throws IOException {
+        final Path first = Files.createTempFile(tempDir, "A", ".dic");
+        final Path second = Files.createTempFile(tempDir, "B", ".dic");
+        final Path third = Files.createTempFile(tempDir, "F", ".dic");
+        final Path fourth = Files.createTempFile(tempDir, "Z", ".dic");
+
+        final ArgumentCaptor<Collection<Path>> filesCaptor = ArgumentCaptor.captor();
+
+        doNothing().when(dicMibReader)
+                .read(filesCaptor.capture(), any());
+
+        mibManager.add(tempDir.toString());
+
+        final Iterator<Path> fileReadOrder = filesCaptor.getValue().iterator();
+        assertEquals(fileReadOrder.next(), first);
+        assertEquals(fileReadOrder.next(), second);
+        assertEquals(fileReadOrder.next(), third);
+        assertEquals(fileReadOrder.next(), fourth);
+        assertFalse(fileReadOrder.hasNext());
     }
 
     @Test
