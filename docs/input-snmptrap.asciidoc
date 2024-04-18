@@ -81,7 +81,6 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-community>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
-| <<plugins-{type}s-{plugin}-local_engine_id>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
 | <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|Yes
@@ -165,16 +164,7 @@ Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (E
   * Value type is <<string,string>>
   * Default value is `"0.0.0.0"`
 
-The address to listen on
-
-[id="plugins-{type}s-{plugin}-local_engine_id"]
-===== `local_engine_id`
-
-  * Value type is <<string,string>>
-  * There is no default value for this setting
-
-The SNMPv3 local engine ID. Its length must be greater or equal than 5 and less or equal than 32.
-If not provided, a default ID is generated based on the local IP address and additional four random bytes.
+The address to listen on.
 
 [id="plugins-{type}s-{plugin}-mib_paths"]
 ===== `mib_paths`
