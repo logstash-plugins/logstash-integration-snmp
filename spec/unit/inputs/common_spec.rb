@@ -138,38 +138,6 @@ shared_examples 'a common SNMP plugin' do
   context '#build_snmp_client!' do
     let(:client_builder) { double('org.logstash.snmp.SnmpClientBuilder') }
 
-    context 'with `local_engine_id` set' do
-      context 'with length lower than 5' do
-        let(:config) { super().merge('local_engine_id' => '1234') }
-
-        it 'should raise' do
-          error_message = '`local_engine_id` length must be greater or equal than 5'
-          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to raise_error(LogStash::ConfigurationError, error_message)
-        end
-      end
-
-      context 'with valid length' do
-        let(:local_engine_id) { '0' * 32 }
-        let(:config) { super().merge('local_engine_id' => local_engine_id) }
-
-        it 'should set builder value' do
-          expect(client_builder).to receive(:setLocalEngineId).with(local_engine_id)
-          expect(client_builder).to receive(:setMapOidVariableValues)
-          expect(client_builder).to receive(:build)
-          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to_not raise_error
-        end
-      end
-
-      context 'with length greater than 32' do
-        let(:config) { super().merge('local_engine_id' => '0' * 33) }
-
-        it 'should raise' do
-          error_message = '`local_engine_id` length must be lower or equal than 32'
-          expect { plugin.build_snmp_client!(client_builder, validate_usm_user: false) }.to raise_error(LogStash::ConfigurationError, error_message)
-        end
-      end
-    end
-
     context 'with USM user validation' do
       let(:config) { super().merge('security_name' => 'public') }
 

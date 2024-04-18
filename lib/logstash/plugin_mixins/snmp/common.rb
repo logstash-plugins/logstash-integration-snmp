@@ -69,12 +69,6 @@ module LogStash
           # The target is only relevant while decoding data into a new event.
           base.config :target, :validate => :field_reference
 
-          # SNMPv3 Options
-          #
-          # The optional SNMPv3 engine's administratively-unique identifier.
-          # Its length must be greater or equal than 5 and less or equal than 32.
-          base.config :local_engine_id, :validate => :string
-
           # SNMPv3 Credentials
           #
           # A single user can be configured and will be used for all defined SNMPv3 requests.
@@ -122,14 +116,12 @@ module LogStash
 
         def build_snmp_client!(client_builder, validate_usm_user: false)
           validate_usm_user! if validate_usm_user
-          validate_local_engine_id!
 
           unless @security_name.nil?
             client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
           end
 
           client_builder.setMapOidVariableValues(@oid_map_field_values)
-          client_builder.setLocalEngineId(@local_engine_id) unless @local_engine_id.nil?
           client_builder.build
         end
 
@@ -197,18 +189,6 @@ module LogStash
 
           if pass_config_value&.value && pass_config_value.value.length < 8
             errors << "`#{pass_config_name}` passphrase must be at least 8 bytes long"
-          end
-        end
-
-        def validate_local_engine_id!
-          return if @local_engine_id.nil?
-
-          if @local_engine_id.length < 5
-            raise(LogStash::ConfigurationError, '`local_engine_id` length must be greater or equal than 5')
-          end
-
-          if @local_engine_id.length > 32
-            raise(LogStash::ConfigurationError, '`local_engine_id` length must be lower or equal than 32')
           end
         end
 

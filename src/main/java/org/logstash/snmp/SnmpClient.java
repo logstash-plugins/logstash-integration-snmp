@@ -15,6 +15,8 @@ import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
 import org.snmp4j.UserTarget;
+import org.snmp4j.event.AuthenticationFailureEvent;
+import org.snmp4j.event.AuthenticationFailureListener;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -171,7 +173,8 @@ public class SnmpClient implements Closeable {
             int messageDispatcherPoolSize
     ) {
         final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
-        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+        final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
+        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, dispatcherImpl);
 
         if (supportedVersions.contains(SnmpConstants.version1)) {
             dispatcher.addMessageProcessingModel(new MPv1());
@@ -185,6 +188,21 @@ public class SnmpClient implements Closeable {
             final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
+
+            // When enabled, it logs authentication failures from incoming messages
+            if (logger.isDebugEnabled()) {
+                dispatcherImpl.addAuthenticationFailureListener(new AuthenticationFailureListener() {
+                    @Override
+                    public <A extends Address> void authenticationFailure(final AuthenticationFailureEvent<A> event) {
+                        final String message = SnmpConstants.usmErrorMessage(event.getError());
+                        logger.debug("SNMP authentication failed. source: {}, reason: {} ({})",
+                                event.getAddress(),
+                                message,
+                                event.getError());
+
+                    }
+                });
+            }
         }
 
         return dispatcher;
