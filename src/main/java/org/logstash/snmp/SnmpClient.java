@@ -163,7 +163,8 @@ public class SnmpClient implements Closeable {
             int threadPoolSize
     ) {
         final ThreadPool threadPool = ThreadPool.create(threadPoolName, threadPoolSize);
-        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+        final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
+        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, dispatcherImpl);
 
         if (supportedVersions.contains(SnmpConstants.version1)) {
             dispatcher.addMessageProcessingModel(new MPv1());
@@ -177,6 +178,18 @@ public class SnmpClient implements Closeable {
             final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
+
+            // When enabled, it logs authentication failures from incoming messages
+            if (logger.isDebugEnabled()) {
+                dispatcherImpl.addAuthenticationFailureListener(event -> {
+                    final String message = SnmpConstants.usmErrorMessage(event.getError());
+                    logger.debug("SNMP authentication failed. source: {}, reason: {} ({})",
+                            event.getAddress(),
+                            message,
+                            event.getError());
+
+                });
+            }
         }
 
         return dispatcher;

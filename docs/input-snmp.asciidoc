@@ -62,6 +62,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-get>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-hosts>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-interval>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-local_engine_id>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
 | <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|No
@@ -92,6 +93,19 @@ This plugin supports the following SNMPv3 authentication options.
 
 Also see <<plugins-{type}s-{plugin}-common-options>> for a list of options supported by all
 input plugins.
+
+[id="plugins-{type}s-{plugin}-ecs_compatibility"]
+===== `ecs_compatibility`
+
+  * Value type is <<string,string>>
+  * Supported values are:
+    ** `disabled`: does not use ECS-compatible field names (fields might be set at the root of the event)
+    ** `v1`, `v8`: avoids field names that might conflict with Elastic Common Schema (for example, the `host` field)
+  * Default value depends on which version of Logstash is running:
+    ** When Logstash provides a `pipeline.ecs_compatibility` setting, its value is used as the default
+    ** Otherwise, the default value is `disabled`.
+
+Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (ECS)].
 
 [id="plugins-{type}s-{plugin}-get"]
 ===== `get`
@@ -175,6 +189,15 @@ input {
 
 The `interval` option specifies the polling interval in seconds.
 If polling all configured hosts takes longer than this interval, a warning will be emitted to the logs.
+
+[id="plugins-{type}s-{plugin}-local_engine_id"]
+===== `local_engine_id`
+
+  * Value type is <<string,string>>
+  * There is no default value for this setting
+
+The SNMPv3 local engine ID. Its length must be greater or equal than 5 and less or equal than 32.
+If not provided, a default ID is generated based on the local IP address and additional four random bytes.
 
 [id="plugins-{type}s-{plugin}-mib_paths"]
 ===== `mib_paths`
@@ -299,6 +322,26 @@ input {
 }
 -----
 
+[id="plugins-{type}s-{plugin}-target"]
+===== `target`
+
+  * Value type is <<string,string>>
+  * There is no default value for this setting
+
+The name of the field under which SNMP payloads are assigned.
+If not specified data will be stored in the root of the event.
+
+Setting a target is recommended when <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled.
+
+[id="plugins-{type}s-{plugin}-use_provided_mibs"]
+===== `use_provided_mibs`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `true`
+
+This plugin provides all IETF MIBs (management information bases), publicly available in the https://www.ibr.cs.tu-bs.de/projects/libsmi[libsmi] version `0.5.0`.
+When enabled, it automatically loads the bundled MIBs and provides mapping of the numeric OIDs to MIB field names in the resulting event.
+
 ==== SNMPv3 Authentication Options
 
 A **single user** can be configured and will be used for all defined SNMPv3 hosts.
@@ -319,20 +362,8 @@ The `auth_pass` option specifies the SNMPv3 authentication passphrase or passwor
 The `auth_protocol` option specifies the SNMPv3 authentication protocol or type
 
 * Value can be any of: `md5`, `sha`, `sha2`, `hmac128sha224`, `hmac192sha256`, `hmac256sha384`, `hmac384sha512`
+* Note that `sha2` and `hmac192sha256` are equivalent
 * There is no default value for this setting
-
-[id="plugins-{type}s-{plugin}-ecs_compatibility"]
-===== `ecs_compatibility`
-
-  * Value type is <<string,string>>
-  * Supported values are:
-    ** `disabled`: does not use ECS-compatible field names (fields might be set at the root of the event)
-    ** `v1`, `v8`: avoids field names that might conflict with Elastic Common Schema (for example, the `host` field)
-  * Default value depends on which version of Logstash is running:
-    ** When Logstash provides a `pipeline.ecs_compatibility` setting, its value is used as the default
-    ** Otherwise, the default value is `disabled`.
-
-Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (ECS)].
 
 [id="plugins-{type}s-{plugin}-priv_pass"]
 ===== `priv_pass`
@@ -351,14 +382,6 @@ The `priv_pass` option specifies the SNMPv3 encryption password.
 
 The `priv_protocol` option specifies the SNMPv3 privacy/encryption protocol.
 
-[id="plugins-{type}s-{plugin}-security_name"]
-===== `security_name`
-
-  * Value type is <<string,string>>
-  * There is no default value for this setting
-
-The `security_name` option specifies the SNMPv3 security name or user name.
-
 [id="plugins-{type}s-{plugin}-security_level"]
 ===== `security_level`
 
@@ -366,18 +389,15 @@ The `security_name` option specifies the SNMPv3 security name or user name.
   * There is no default value for this setting
 
 The `security_level` option specifies the SNMPv3 security level between
-Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Privacy. 
+Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Privacy.
 
-[id="plugins-{type}s-{plugin}-target"]
-===== `target`
+[id="plugins-{type}s-{plugin}-security_name"]
+===== `security_name`
 
   * Value type is <<string,string>>
   * There is no default value for this setting
 
-The name of the field under which SNMP payloads are assigned.
-If not specified data will be stored in the root of the event.
-
-Setting a target is recommended when <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled.
+The `security_name` option specifies the SNMPv3 security name or user name.
 
 [id="plugins-{type}s-{plugin}-use_provided_mibs"]
 ===== `use_provided_mibs`

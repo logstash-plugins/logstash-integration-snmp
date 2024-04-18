@@ -11,8 +11,8 @@ import org.snmp4j.smi.OID;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -48,7 +48,7 @@ class SmilibPythonMibReader implements MibReader {
             .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
     @Override
-    public void read(List<Path> paths, BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
+    public void read(Collection<Path> paths, BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
         for (final Path path : paths) {
             String content;
             try {

@@ -11,16 +11,15 @@ require 'logstash/plugin_mixins/event_support/event_factory_adapter'
 require 'logstash/plugin_mixins/validator_support/field_reference_validation_adapter'
 require 'logstash/plugin_mixins/snmp/common'
 
-# Generate a repeating message.
-#
-# This plugin is intented only as an example.
-
+# The SNMP input plugin polls network devices using Simple Network Management Protocol (SNMP)
+# to gather information related to the current state of the devices operation.
 class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   java_import 'org.logstash.snmp.SnmpClient'
   java_import 'org.snmp4j.smi.OID'
 
   include LogStash::PluginMixins::ECSCompatibilitySupport(:disabled, :v1, :v8 => :v1)
+
   include LogStash::PluginMixins::ECSCompatibilitySupport::TargetCheck
 
   include LogStash::PluginMixins::EventSupport::EventFactoryAdapter
@@ -32,13 +31,13 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   config_name "snmp"
 
   # List of OIDs for which we want to retrieve the scalar value
-  config :get,:validate => :array # ["1.3.6.1.2.1.1.1.0"]
+  config :get, :validate => :array # ["1.3.6.1.2.1.1.1.0"]
 
   # List of OIDs for which we want to retrieve the subtree of information
-  config :walk,:validate => :array # ["1.3.6.1.2.1.1.1.0"]
+  config :walk, :validate => :array # ["1.3.6.1.2.1.1.1.0"]
 
   # List of tables to walk
-  config :tables, :validate => :array  #[ {"name" => "interfaces" "columns" => ["1.3.6.1.2.1.2.2.1.1", "1.3.6.1.2.1.2.2.1.2", "1.3.6.1.2.1.2.2.1.5"]} ]
+  config :tables, :validate => :array # [ {"name" => "interfaces" "columns" => ["1.3.6.1.2.1.2.2.1.1", "1.3.6.1.2.1.2.2.1.2", "1.3.6.1.2.1.2.2.1.5"]} ]
 
   # List of hosts to query the configured `get` and `walk` options.
   #
@@ -50,36 +49,16 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   #  `version` `1`, `2c` or `3` with a default value of `2c`
   #  `retries` with a default value of `2`
   #  `timeout` in milliseconds with a default value of `1000`
-  config :hosts, :validate => :array  #[ {"host" => "udp:127.0.0.1/161", "community" => "public"} ]
+  config :hosts, :validate => :array # [ {"host" => "udp:127.0.0.1/161", "community" => "public"} ]
 
   # Set polling interval in seconds
   #
   # The default, `30`, means poll each host every 30 seconds.
   config :interval, :validate => :number, :default => 30
 
-  # SNMPv3 Credentials
-  #
-  # A single user can be configured and will be used for all defined SNMPv3 hosts.
-  # Multiple snmp input declarations will be needed if multiple SNMPv3 users are required.
-  # If not using SNMPv3 simply leave options empty.
-
-  # The SNMPv3 security name or user name
-  config :security_name, :validate => :string
-
-  # The SNMPv3 authentication protocol or type
-  config :auth_protocol, :validate => ["md5", "sha", "sha2", "hmac128sha224", "hmac192sha256", "hmac256sha384", "hmac384sha512"]
-
-  # The SNMPv3 authentication passphrase or password
-  config :auth_pass, :validate => :password
-
-  # The SNMPv3 privacy/encryption protocol
-  config :priv_protocol, :validate => ["des", "3des", "aes", "aes128", "aes192", "aes256"]
-
-  # The SNMPv3 encryption password
-  config :priv_pass, :validate => :password
-
-  # The SNMPv3 security level can be Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Privacy
-  config :security_level, :validate => ["noAuthNoPriv", "authNoPriv", "authPriv"]
+  # The optional SNMPv3 engine's administratively-unique identifier.
+  # Its length must be greater or equal than 5 and less or equal than 32.
+  config :local_engine_id, :validate => :string
 
   def initialize(params={})
     super(params)
@@ -100,58 +79,55 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     validate_oids!
     validate_hosts!
     validate_tables!
+    validate_local_engine_id!
 
     mib_manager = build_mib_manager!
 
     # setup client definitions per provided host
     @client_definitions = []
-    client_protocols = Set.new
+    supported_transports = Set.new
+    hosts_versions = Set.new
 
     @hosts.each do |host|
-      host_name = host["host"]
-      community = host["community"] || "public"
-      version = host["version"] || "2c"
-      raise(LogStash::ConfigurationError, "only protocol version '1', '2c' and '3' are supported for host option '#{host_name}'") unless version =~ VERSION_REGEX
+      host_name = host['host']
+      version = host['version'] || '2c'
 
-      retries = host["retries"] || 2
-      timeout = host["timeout"] || 1000
-
-      # TODO: move these validations in a custom validator so it happens before the register method is called.
-      host_details = host_name.match(HOST_REGEX)
-      raise(LogStash::ConfigurationError, "invalid format for host option '#{host_name}'") unless host_details
-      raise(LogStash::ConfigurationError, "only udp & tcp protocols are supported for host option '#{host_name}'") unless host_details[:host_protocol].to_s =~ /^(?:udp|tcp)$/i
-
-      protocol = host_details[:host_protocol]
-      address = host_details[:host_address]
-      port = host_details[:host_port]
-
-      if version == "3"
-        validate_v3_user!
+      unless version =~ VERSION_REGEX
+        raise(LogStash::ConfigurationError, "only protocol version '1', '2c' and '3' are supported for host option '#{host_name}'")
       end
 
+      host_details = host_name.match(HOST_REGEX)
+      raise(LogStash::ConfigurationError, "invalid format for host option '#{host_name}'") unless host_details
+
+      unless host_details[:host_protocol].to_s =~ /^(?:udp|tcp)$/i
+        raise(LogStash::ConfigurationError, "only udp & tcp protocols are supported for host option '#{host_name}'")
+      end
+
+      host_protocol = host_details[:host_protocol]
       definition = {
         :get => Array(get),
         :walk => Array(walk),
 
         :host => host_name,
-        :host_address => address,
-        :host_protocol => protocol,
-        :host_port => port,
-        :host_community => community,
+        :host_address => host_details[:host_address],
+        :host_protocol => host_protocol,
+        :host_port => host_details[:host_port],
+        :host_community => host['community'] || 'public',
 
-        :retries => retries,
-        :timeout => timeout,
+        :retries => host['retries'] || 2,
+        :timeout => host['timeout'] || 1000,
         :version => version,
 
         :security_name => @security_name,
         :security_level => @security_level,
       }
 
-      client_protocols << protocol
+      supported_transports << host_protocol
+      hosts_versions << version
       @client_definitions << definition
     end
 
-    @client = build_client!(mib_manager, client_protocols)
+    @client = build_client!(mib_manager, supported_transports, hosts_versions)
   end
 
   def run(queue)
@@ -253,9 +229,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     end
   end
 
-  def stop
-  end
-
   private
 
   OID_REGEX = /^\.?([0-9\.]+)$/
@@ -295,19 +268,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     raise(LogStash::ConfigurationError, "at least one get OID, one walk OID, or one table OID is required") if @get.empty? && @walk.empty? && @tables.nil?
   end
 
-  def validate_v3_user!
-    errors = []
-
-    errors << "v3 user must have a \"security_name\" option" if @security_name.nil?
-    errors << "you must specify an auth protocol if you specify an auth pass" if @auth_protocol.nil? && !@auth_pass.nil?
-    errors << "you must specify an auth pass if you specify an auth protocol" if !@auth_protocol.nil? && @auth_pass.nil?
-    errors << "you must specify a priv protocol if you specify a priv pass" if @priv_protocol.nil? && !@priv_pass.nil?
-    errors << "you must specify a priv pass if you specify a priv protocol" if !@priv_protocol.nil? &&  @priv_pass.nil?
-
-    raise(LogStash::ConfigurationError, errors.join(", ")) unless errors.empty?
-   end
-
-
   def validate_hosts!
     # TODO: for new we only validate the host part, not the other optional options
 
@@ -326,14 +286,23 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     end
   end
 
-  def build_client!(mib_manager, client_protocols)
-    client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, client_protocols)
-                     .setMapOidVariableValues(@oid_map_field_values)
+  def validate_local_engine_id!
+    return if @local_engine_id.nil?
 
-    unless @security_name.nil?
-      client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value)
+    if @local_engine_id.length < 5
+      raise(LogStash::ConfigurationError, '`local_engine_id` length must be greater or equal than 5')
     end
-    client_builder.build
+
+    if @local_engine_id.length > 32
+      raise(LogStash::ConfigurationError, '`local_engine_id` length must be lower or equal than 32')
+    end
+  end
+
+  def build_client!(mib_manager, supported_transports, hosts_versions)
+    client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, supported_transports)
+    client_builder.setLocalEngineId(@local_engine_id) unless @local_engine_id.nil?
+
+    build_snmp_client!(client_builder, validate_usm_user: hosts_versions.include?('3'))
   end
 
   ##

@@ -8,7 +8,7 @@ import org.snmp4j.smi.OID;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -19,7 +19,7 @@ class RubySnmpMibReader implements MibReader {
     static final String FILE_EXTENSION = "yaml";
 
     @Override
-    public void read(final List<Path> paths, final BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
+    public void read(final Collection<Path> paths, final BiConsumer<OID, OidData> consumer) throws InvalidMibFileException {
         for (final Path path : paths) {
             final Map<String, String> configMap = loadYamlFile(path);
 
