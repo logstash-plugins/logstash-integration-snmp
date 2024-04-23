@@ -366,4 +366,53 @@ input {
 [id="plugins-{type}s-{plugin}-common-options"]
 include::{include_path}/{type}.asciidoc[]
 
+[id="plugins-{type}s-{plugin}-migration-guide-input-snmptrap"]
+==== Migrating from logstash-input-snmptrap
+
+The `logstash-integration-snmp` `snmptrap` input plugin can be configured for maximum compatibility with the https://github.com/logstash-plugins/logstash-input-snmptrap[logstash-input-snmptrap] plugin:
+
+[source,ruby]
+----
+input {
+   snmptrap {
+    use_provided_mibs => false
+    oid_mapping_format => 'ruby_snmp'
+    oid_map_field_values => true
+   }
+}
+
+----
+
+Although the plugin functionality will be almost the same as the https://github.com/logstash-plugins/logstash-input-snmptrap[logstash-input-snmptrap] plugin, there are a few changes that might
+need to be addressed depending on the use-case, and how the ingested data is being handled through the pipeline:
+
+* The received PDU variable bindings are mapped into the Logstash's event using the defined data type.
+By default, `logstash-input-snmptrap` converts all the data to `string`, ignoring the original type. If this
+behavior is desired, a filter can be used to achieve the same results.
+* SNMP `TimeTicks` variables are mapped as `Long` timestamps instead of formatted date string (`%d days, %02d:%02d:%02d.%02d`).
+* `null` variables values are mapped using the string `null` instead of `Null` (upper-case N).
+* No such instance errors are mapped as `error: no such instance currently exists at this OID string` instead of `noSuchInstance`.
+* No such object errors are mapped as `error: no such object currently exists at this OID string` instead of `noSuchObject`.
+* End of MIB view errors are mapped as `error: end of MIB view` instead of `endOfMibView`.
+
+Another major difference is how the `message` field is mapped. `logstash-input-snmptrap` formats the `message` field as
+a ruby-snmp `SNMP::SNMPv1_Trap` object representation, whereas this integration plugin uses JSON. For example:
+
+`logstash-input-snmptrap`:
+
+[source]
+----
+<SNMP::SNMPv1_Trap:0x6f1a7a4 @varbind_list=[#<SNMP::VarBind:0x2d7bcd8f @value="teststring", @name=[1.11.12.13.14.15]>], @timestamp=#<SNMP::TimeTicks:0x1af47e9d @value=55>, @generic_trap=6,  @enterprise=[1.2.3.4.5.6], @source_ip="127.0.0.1", @agent_addr=#<SNMP::IpAddress:0x29a4833e @value="test">, @specific_trap=99>
+----
+
+`logstash-integration-snmptrap`:
+
+[source,json]
+----
+{"error_index":0, "variable_bindings":{"1.3.6.1.6.3.1.1.4.1.0":"SNMPv2-MIB::coldStart", "1.3.6.1.2.1.1.3.0":0}, "error_status":0, "type":"TRAP", "error_status_text":"Success", "community":"public", "version":"2c", "request_id":1436216872}
+----
+
+NOTE: The https://github.com/logstash-plugins/logstash-input-snmptrap[logstash-input-snmptrap]
+plugin must be removed before installing this plugin.
+
 :default_codec!:

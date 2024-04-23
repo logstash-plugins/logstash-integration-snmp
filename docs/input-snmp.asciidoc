@@ -494,4 +494,19 @@ input {
 [id="plugins-{type}s-{plugin}-common-options"]
 include::{include_path}/{type}.asciidoc[]
 
+[id="plugins-{type}s-{plugin}-migration-guide-input-snmp"]
+==== Migrating from logstash-input-snmp
+
+The `logstash-integration-snmp` `snmp` input plugin does support the same https://github.com/logstash-plugins/logstash-input-snmp[logstash-input-snmp] functionalities. There are a few changes that might
+need to be addressed depending on the use-case, and how the ingested data is being handled through the pipeline:
+
+* No such instance errors are mapped as `error: no such instance currently exists at this OID string` instead of `noSuchInstance`.
+* No such object errors are mapped as `error: no such object currently exists at this OID string` instead of `noSuchObject`.
+* End of MIB view errors are mapped as `error: end of MIB view` instead of `endOfMibView`.
+* Unlike the https://github.com/logstash-plugins/logstash-input-snmp[logstash-input-snmp], this plugin fallbacks unknown variable types to its `string` representation instead of logging an error.
+It shouldn't affect existing pipelines, unless they have custom error handlers relying on specific error messages.
+
+NOTE: The https://github.com/logstash-plugins/logstash-input-snmp[logstash-input-snmp]
+plugin must be removed before installing this plugin.
+
 :no_codec!:
