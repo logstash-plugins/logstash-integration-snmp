@@ -203,7 +203,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       # blocks until all requests are complete
       @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, poll_hosts_timeout(max_host_timeout))
     rescue java.util.concurrent.TimeoutException => _
-      # ignore timeouts
+      logger.error("Timed out while waiting for SNMP requests to finish. Consider increasing `poll_hosts_timeout` if the number of hosts is large")
     end
   end
 

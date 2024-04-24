@@ -50,9 +50,6 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         } catch (InterruptedException e) {
             logger.error("worker thread was interrupted while executing SNMP requests. Aborting", e);
             Thread.currentThread().interrupt();
-        } catch (TimeoutException e) {
-            logger.error("timed out while waiting for SNMP requests to finish. timeout: {} ms", timeoutMillis, e);
-            throw e;
         }
     }
 
