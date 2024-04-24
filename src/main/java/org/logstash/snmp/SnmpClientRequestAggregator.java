@@ -129,14 +129,26 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         }
 
         private Map<String, ?> handleRequestException(String operation, Throwable ex, Supplier<Map<String, String>> logPropertiesSupplier) {
-            final Throwable throwable = isWrapperException(ex) && ex.getCause() != null ? ex.getCause() : ex;
-            logger.error("error invoking `{}` operation, ignoring. {}", operation, logPropertiesSupplier.get(), throwable);
+            final Throwable throwable = getWrappedException(ex);
+            final Map<String, String> logProperties = logPropertiesSupplier.get();
+
+            if (logger.isDebugEnabled()){
+                logger.error("error invoking `{}` operation, ignoring. {}", operation, logProperties, throwable);
+            } else {
+                final String errorMessage = throwable != null ? throwable.getMessage() : null;
+                logger.error("error invoking `{}` operation: {}, ignoring. {}", operation, errorMessage, logProperties);
+            }
+
             // Should return null (instead of empty), so it can be differentiated on the #handleRequestData from an empty response
             return null;
         }
 
-        private boolean isWrapperException(Throwable throwable) {
-            return throwable instanceof CompletionException;
+        private Throwable getWrappedException(Throwable throwable) {
+            if (throwable instanceof CompletionException && throwable.getCause() != null) {
+                return throwable.getCause();
+            }
+
+            return throwable;
         }
 
         static Map<String, String> createLogDetails(Target<Address> target, OID[] oids, Map<String, String> extraDetails) {
