@@ -436,7 +436,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
       plugin.do_stop
     end
 
-    queue = []
+    queue = Concurrent::Array.new
     plugin.run(queue)
     queue
   end

@@ -174,42 +174,68 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
 
         it_behaves_like 'a plugin receiving a v2c or v3 trap message', '3'
       end
+
+      context 'when receiving a request with invalid credentials' do
+        let(:auth_pass) { 'wrong@password' }
+
+        it 'should not process the message' do
+          queue = run_plugin_and_get_queue(plugin, timeout: 3) do
+            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, security_level, {'1.1' => 'foo'})
+          end
+
+          expect(queue.size).to eq(0)
+        end
+      end
     end
 
-    context 'with multiple `supported_versions`' do
-      let(:security_name) { 'user' }
-      let(:auth_protocol) { 'md5' }
-      let(:auth_pass) { 'foo@@Bar' }
-      let(:priv_protocol) { 'aes' }
-      let(:priv_pass) { 'bar@@Foo' }
-      let(:security_level) { 'authPriv' }
-      let(:config) do
-        super().merge({
-          'supported_versions' => %w[1 2c 3],
-          'security_name' => security_name,
-          'auth_protocol' => auth_protocol,
-          'auth_pass' => auth_pass,
-          'priv_protocol' => priv_protocol,
-          'priv_pass' => priv_pass,
-          'security_level' => security_level
-        })
-      end
-
-      it 'should receive all versions messages' do
-        queue = run_plugin_and_get_queue(plugin, messages: 4) do
-          oid = '1.3.6.1.2.1.1.1.0'
-          @trap_sender.send_trap_v1(target_address, 'public', { "#{oid}" => '1' })
-          @trap_sender.send_trap_v1(target_address, 'public', { "#{oid}" => '1' })
-          @trap_sender.send_trap_v2c(target_address, 'public', { "#{oid}" => '2c' })
-          @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, security_level, { "#{oid}" => '3' })
+    context 'with supported_versions' do
+      context 'with multiple versions enabled' do
+        let(:security_name) { 'user' }
+        let(:auth_protocol) { 'md5' }
+        let(:auth_pass) { 'foo@@Bar' }
+        let(:priv_protocol) { 'aes' }
+        let(:priv_pass) { 'bar@@Foo' }
+        let(:security_level) { 'authPriv' }
+        let(:config) do
+          super().merge({
+            'supported_versions' => %w[1 2c 3],
+            'security_name' => security_name,
+            'auth_protocol' => auth_protocol,
+            'auth_pass' => auth_pass,
+            'priv_protocol' => priv_protocol,
+            'priv_pass' => priv_pass,
+            'security_level' => security_level
+          })
         end
 
-        expect(queue.size).to eq(4)
+        it 'should receive all messages' do
+          queue = run_plugin_and_get_queue(plugin, messages: 4) do
+            oid = '1.3.6.1.2.1.1.1.0'
+            @trap_sender.send_trap_v1(target_address, 'public', { "#{oid}" => '1' })
+            @trap_sender.send_trap_v1(target_address, 'public', { "#{oid}" => '1' })
+            @trap_sender.send_trap_v2c(target_address, 'public', { "#{oid}" => '2c' })
+            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, security_level, { "#{oid}" => '3' })
+          end
 
-        events_per_version = queue.group_by { |event| event.get("#{PDU_METADATA}[version]") }
-        expect(events_per_version['1'].size).to eq(2)
-        expect(events_per_version['2c'].size).to eq(1)
-        expect(events_per_version['3'].size).to eq(1)
+          expect(queue.size).to eq(4)
+
+          events_per_version = queue.group_by { |event| event.get("#{PDU_METADATA}[version]") }
+          expect(events_per_version['1'].size).to eq(2)
+          expect(events_per_version['2c'].size).to eq(1)
+          expect(events_per_version['3'].size).to eq(1)
+        end
+      end
+
+      context 'with specific version enabled' do
+        let(:config) { super().merge({ 'supported_versions' => ['1'] }) }
+
+        it 'should not process unsupported message versions' do
+          queue = run_plugin_and_get_queue(plugin, timeout: 3) do
+            @trap_sender.send_trap_v2c(target_address, 'public', { '1' => 'foo' })
+          end
+
+          expect(queue.size).to eq(0)
+        end
       end
     end
 
@@ -321,7 +347,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
       end
     end
 
-    queue = []
+    queue = Concurrent::Array.new
     plugin.run(queue)
     queue
   end
