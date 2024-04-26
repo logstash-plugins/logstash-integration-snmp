@@ -64,6 +64,9 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # Number of threads to use for concurrently executing the hosts SNMP requests.
   config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.maximum
 
+  # Timeout in milliseconds to execute all hosts configured operations (get, walk, table).
+  config :poll_hosts_timeout, :validate => :number
+
   def initialize(params={})
     super(params)
 
@@ -196,6 +199,17 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       req[:request].get_result_async(result_consumer)
     end
 
+    begin
+      # blocks until all requests are complete
+      @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, poll_hosts_timeout(max_host_timeout))
+    rescue java.util.concurrent.TimeoutException => _
+      logger.error("Timed out while waiting for SNMP requests to finish. Consider increasing `poll_hosts_timeout` if the number of hosts is large")
+    end
+  end
+
+  def poll_hosts_timeout(max_host_timeout)
+    return @poll_hosts_timeout if @poll_hosts_timeout
+
     # this timeout should be a safe-guard and it should never wait for that long.
     # It might reach this point if there are several hosts operations, the hosts
     # are unreachable/unhealthy, and/or the configured host timeout is too high.
@@ -203,8 +217,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     in_flight_timeout = max_host_timeout if max_host_timeout > in_flight_timeout
     in_flight_timeout = @interval if @interval > in_flight_timeout
 
-    # blocks until all requests are complete
-    @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, in_flight_timeout)
+    in_flight_timeout
   end
 
   def stoppable_interval_runner
