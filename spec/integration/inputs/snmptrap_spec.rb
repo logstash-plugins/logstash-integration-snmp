@@ -35,7 +35,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         trap_event = queue.pop
 
         # fields
-        expect(trap_event.get('SNMPv2-MIB::sysDescr.0')).to eq('It is a trap')
+        expect(trap_event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('It is a trap')
 
         # metadata
         expect(trap_event.get("#{PDU_METADATA}[version]")).to eq('1')
@@ -47,7 +47,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         expect(trap_event.get("#{PDU_METADATA}[timestamp]")).to be(0)
         expect(trap_event.get("#{PDU_METADATA}[community]")).to eq(community)
         expect(trap_event.get("#{PDU_METADATA}[variable_bindings]")).to match hash_including('1.3.6.1.2.1.1.1.0' => 'It is a trap')
-        expect(eval(trap_event.get('message'))).to eq(trap_event.get("#{PDU_METADATA}"))
+        expect(LogStash::Json.load(trap_event.get('message'))).to eq(trap_event.get("#{PDU_METADATA}"))
       end
     end
 
@@ -68,7 +68,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         trap_event = queue.pop
 
         # fields
-        expect(trap_event.get('SNMPv2-MIB::sysDescr.0')).to eq("It is a #{version} trap" )
+        expect(trap_event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq("It is a #{version} trap" )
 
         # metadata
         expect(trap_event.get("#{PDU_METADATA}[version]")).to eq(version)
@@ -79,7 +79,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         expect(trap_event.get("#{PDU_METADATA}[error_index]")).to eq(0)
         expect(trap_event.get("#{PDU_METADATA}[community]")).to eq('public') if version == '2c'
         expect(trap_event.get("#{PDU_METADATA}[variable_bindings]")).to match hash_including('1.3.6.1.2.1.1.1.0' => "It is a #{version} trap")
-        expect(eval(trap_event.get('message'))).to eq(trap_event.get("#{PDU_METADATA}"))
+        expect(LogStash::Json.load(trap_event.get('message'))).to eq(trap_event.get("#{PDU_METADATA}"))
       end
     end
 
@@ -176,11 +176,9 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
       end
 
       context 'when receiving a request with invalid credentials' do
-        let(:auth_pass) { 'wrong@password' }
-
         it 'should not process the message' do
           queue = run_plugin_and_get_queue(plugin, timeout: 3) do
-            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, security_level, {'1.1' => 'foo'})
+            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, 'wrong@password', priv_protocol, priv_pass, security_level, {'1.1' => 'foo'})
           end
 
           expect(queue.size).to eq(0)
@@ -251,15 +249,15 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
       end
     end
 
-    context 'with oid_mapping_format => default' do
-      let(:config) { super().merge({ 'oid_mapping_format' => 'default' }) }
+    context 'with oid_mapping_format => ruby_snmp' do
+      let(:config) { super().merge({ 'oid_mapping_format' => 'ruby_snmp', 'use_provided_mibs' => false }) }
 
       it 'should have OID fields mapped as dotted string' do
         event = run_plugin_and_get_queue(plugin) do
           @trap_sender.send_trap_v1(target_address, 'public', { '1.3.6.1.2.1.1.1.0' => '1.0' })
         end.pop
 
-        expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('1.0')
+        expect(event.get('SNMPv2-MIB::sysDescr.0')).to eq('1.0')
       end
     end
 
@@ -273,7 +271,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
           end.pop
 
           expect(event).to be_a(LogStash::Event)
-          expect(event.get('SNMPv2-MIB::sysObjectID.0')).to eq('1.3.6.1.4.1.8072.3.2.10')
+          expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0')).to eq('1.3.6.1.4.1.8072.3.2.10')
         end
       end
 
@@ -286,13 +284,13 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
           end.pop
 
           expect(event).to be_a(LogStash::Event)
-          expect(event.get('SNMPv2-MIB::sysObjectID.0')).to eq('SNMPv2-SMI::enterprises.8072.3.2.10')
+          expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0')).to eq('iso.org.dod.internet.private.enterprises.8072.3.2.10')
         end
       end
     end
 
     context 'with no MIBs provided' do
-      let(:config) { super().reject { |key, _| key == 'mib_paths' }.merge('use_provided_mibs' => false) }
+      let(:config) { super().reject { |key, _| key == 'mib_paths' }.merge('use_provided_mibs' => false, 'oid_mapping_format' => 'ruby_snmp') }
 
       it 'should load default ruby-snmp MIBs' do
         event = run_plugin_and_get_queue(plugin) do
@@ -334,7 +332,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
     Thread.new do
       Timeout::timeout(5) do
         until plugin.client_listening?
-          sleep 0.1
+          sleep 0.2
         end
       end
 

@@ -12,10 +12,12 @@ import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
 import org.snmp4j.mp.MPv3;
+import org.snmp4j.mp.MessageProcessingModel;
 import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.OctetString;
@@ -28,6 +30,10 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.logstash.snmp.SnmpUtils.parseAuthProtocol;
 import static org.logstash.snmp.SnmpUtils.parseNullableOctetString;
@@ -46,7 +52,7 @@ public class SnmpTestTrapSender {
     }
 
     public void sendTrapV1(String address, String community, Map<String, Object> bindings) {
-        final CommunityTarget target = new CommunityTarget(
+        final CommunityTarget<Address> target = new CommunityTarget<>(
                 GenericAddress.parse(address),
                 new OctetString(community)
         );
@@ -61,7 +67,7 @@ public class SnmpTestTrapSender {
         pdu.setType(PDU.TRAP);
         addVariableBindings(pdu, bindings);
 
-        final CommunityTarget target = new CommunityTarget(
+        final CommunityTarget<Address> target = new CommunityTarget<>(
                 GenericAddress.parse(address),
                 new OctetString(community)
         );
@@ -80,37 +86,46 @@ public class SnmpTestTrapSender {
             String privPassphrase,
             String securityLevel,
             Map<String, Object> bindings) {
+        try {
+            final USM usm = new USM();
+            usm.addUser(new UsmUser(
+                    new OctetString(securityName),
+                    parseAuthProtocol(authProtocol),
+                    parseNullableOctetString(authPassphrase),
+                    parsePrivProtocol(privProtocol),
+                    parseNullableOctetString(privPassphrase)
+            ));
 
-        final MessageDispatcher messageDispatcher = snmp.getMessageDispatcher();
+            snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
 
-        final USM usm = new USM();
-        usm.addUser(new UsmUser(
-                new OctetString(securityName),
-                parseAuthProtocol(authProtocol),
-                parseNullableOctetString(authPassphrase),
-                parsePrivProtocol(privProtocol),
-                parseNullableOctetString(privPassphrase)
-        ));
-        messageDispatcher.addMessageProcessingModel(new MPv3(usm));
+            final ScopedPDU pdu = new ScopedPDU();
+            pdu.setType(PDU.TRAP);
+            addVariableBindings(pdu, bindings);
 
+            final Target<Address> target = new UserTarget<>();
+            target.setAddress(GenericAddress.parse(address));
+            target.setSecurityLevel(parseSecurityLevel(securityLevel));
+            target.setSecurityName(new OctetString(securityName));
+            target.setVersion(SnmpConstants.version3);
+            target.setSecurityModel(SecurityModel.SECURITY_MODEL_USM);
 
-        final ScopedPDU pdu = new ScopedPDU();
-        pdu.setType(PDU.TRAP);
-        addVariableBindings(pdu, bindings);
-
-        final Target target = new UserTarget();
-        target.setAddress(GenericAddress.parse(address));
-        target.setSecurityLevel(parseSecurityLevel(securityLevel));
-        target.setSecurityName(new OctetString(securityName));
-        target.setVersion(SnmpConstants.version3);
-        target.setSecurityModel(SecurityModel.SECURITY_MODEL_USM);
-
-        send(pdu, target);
+            send(pdu, target);
+        } finally {
+            cleanupSnmpMessageDispatcherMPv3Model();
+        }
     }
 
-    private void send(PDU pdu, Target target) {
+    private void cleanupSnmpMessageDispatcherMPv3Model() {
+        final MessageDispatcher messageDispatcher = snmp.getMessageDispatcher();
+        final MessageProcessingModel existingMPv3Model = messageDispatcher.getMessageProcessingModel(MPv3.ID);
+        if (existingMPv3Model != null) {
+            messageDispatcher.removeMessageProcessingModel(existingMPv3Model);
+        }
+    }
+
+    private void send(PDU pdu, Target<Address> target) {
         try {
-            final ResponseEvent response = snmp.send(pdu, target);
+            final ResponseEvent<Address> response = snmp.send(pdu, target);
             if (response != null && response.getError() != null) {
                 throw new RuntimeException(response.getError());
             }
@@ -150,8 +165,18 @@ public class SnmpTestTrapSender {
 
     public void close() {
         try {
-            snmp.close();
-        } catch (IOException e) {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    snmp.close();
+                } catch (IOException e) {
+                    // Ignore
+                }
+            }).get(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (TimeoutException e) {
+            // Ignore
+        } catch (ExecutionException e) {
             throw new RuntimeException(e);
         }
     }

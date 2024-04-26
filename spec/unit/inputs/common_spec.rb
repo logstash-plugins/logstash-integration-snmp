@@ -167,7 +167,7 @@ shared_examples 'a common SNMP plugin' do
       end
 
       [{ protocol: 'auth_protocol', pass: 'auth_pass', protocol_value: 'md5', security_levels: %w[authPriv authNoPriv]},
-        { protocol: 'priv_protocol', pass: 'priv_pass', protocol_value: 'des', security_levels: %w[authPriv] }].each do |config|
+       { protocol: 'priv_protocol', pass: 'priv_pass', protocol_value: 'des', security_levels: %w[authPriv] }].each do |config|
         context "with only `#{config[:protocol]}` set" do
           let(:config) { super().merge((config[:protocol]).to_s => (config[:protocol_value]).to_s ) }
 
