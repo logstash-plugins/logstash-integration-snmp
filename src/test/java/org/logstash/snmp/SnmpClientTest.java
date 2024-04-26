@@ -743,7 +743,7 @@ class SnmpClientTest {
             assertEquals("error: no such object currently exists at this OID",
                     client.coerceVariable(new Null(SMIConstants.EXCEPTION_NO_SUCH_OBJECT)));
 
-            assertEquals("end of MIB view",
+            assertEquals("error: end of MIB view",
                     client.coerceVariable(new Null(SMIConstants.EXCEPTION_END_OF_MIB_VIEW)));
         }
     }

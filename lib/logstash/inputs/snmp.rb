@@ -57,10 +57,17 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # The default, `30`, means poll each host every 30 seconds.
   config :interval, :validate => :number, :default => 30
 
+  # The optional SNMPv3 engine's administratively-unique identifier.
+  # Its length must be greater or equal than 5 and less or equal than 32.
+  config :local_engine_id, :validate => :string
+
   # Number of threads to use for concurrently executing the hosts SNMP requests.
   config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.maximum
 
-  def initialize(params = {})
+  # Timeout in milliseconds to execute all hosts configured operations (get, walk, table).
+  config :poll_hosts_timeout, :validate => :number
+
+  def initialize(params={})
     super(params)
 
     @host_protocol_field = ecs_select[disabled: '[@metadata][host_protocol]', v1: '[@metadata][input][snmp][host][protocol]']
@@ -192,6 +199,17 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       req[:request].get_result_async(result_consumer)
     end
 
+    begin
+      # blocks until all requests are complete
+      @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, poll_hosts_timeout(max_host_timeout))
+    rescue java.util.concurrent.TimeoutException => _
+      logger.error("Timed out while waiting for SNMP requests to finish. Consider increasing `poll_hosts_timeout` if the number of hosts is large")
+    end
+  end
+
+  def poll_hosts_timeout(max_host_timeout)
+    return @poll_hosts_timeout if @poll_hosts_timeout
+
     # this timeout should be a safe-guard and it should never wait for that long.
     # It might reach this point if there are several hosts operations, the hosts
     # are unreachable/unhealthy, and/or the configured host timeout is too high.
@@ -199,8 +217,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     in_flight_timeout = max_host_timeout if max_host_timeout > in_flight_timeout
     in_flight_timeout = @interval if @interval > in_flight_timeout
 
-    # blocks until all requests are complete
-    @request_aggregator.await(in_flight_requests.map { |p| p[:request] }, in_flight_timeout)
+    in_flight_timeout
   end
 
   def stoppable_interval_runner
@@ -232,6 +249,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     validate_oids!
     validate_hosts!
     validate_tables!
+    validate_local_engine_id!
   end
 
   def validate_oids!
@@ -285,12 +303,26 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     end
   end
 
+  def validate_local_engine_id!
+    return if @local_engine_id.nil?
+
+    if @local_engine_id.length < 5
+      raise(LogStash::ConfigurationError, '`local_engine_id` length must be greater or equal than 5')
+    end
+
+    if @local_engine_id.length > 32
+      raise(LogStash::ConfigurationError, '`local_engine_id` length must be lower or equal than 32')
+    end
+  end
+
   def create_request_aggregator
     SnmpClientRequestAggregator.new(@threads, 'SnmpRequestWorker')
   end
 
   def build_client!(mib_manager, supported_transports, hosts_versions)
     client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, supported_transports)
+    client_builder.setLocalEngineId(@local_engine_id) unless @local_engine_id.nil?
+
     build_snmp_client!(client_builder, validate_usm_user: hosts_versions.include?('3'))
   end
 

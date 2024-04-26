@@ -181,6 +181,37 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
     end
   end
 
+  describe 'local_engine_id validation' do
+    let(:local_engine_id) { nil }
+    let(:config) { super().merge('get' => ["1.0"], 'hosts' => [{'host' => "udp:127.0.0.1/161", "version" => "2c"}], 'local_engine_id' => local_engine_id) }
+
+    context 'with length lower than 5' do
+      let(:local_engine_id) { '1234' }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be greater or equal than 5'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with valid length' do
+      let(:local_engine_id) { '0' * 32 }
+
+      it 'should not raise' do
+        expect { plugin.register }.to_not raise_error
+      end
+    end
+
+    context 'with length greater than 32' do
+      let(:local_engine_id) { '0' * 33 }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be lower or equal than 32'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+  end
+
   ecs_compatibility_matrix(:disabled, :v1, :v8) do |ecs_select|
     let(:queue) { Queue.new }
     let(:run_once_runner) { RunOnceStoppableIntervalRunner.new(plugin) }

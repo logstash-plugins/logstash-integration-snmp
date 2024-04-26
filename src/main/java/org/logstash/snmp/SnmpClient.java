@@ -16,6 +16,8 @@ import org.snmp4j.Snmp;
 import org.snmp4j.Target;
 import org.snmp4j.TransportMapping;
 import org.snmp4j.UserTarget;
+import org.snmp4j.event.AuthenticationFailureEvent;
+import org.snmp4j.event.AuthenticationFailureListener;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -172,7 +174,8 @@ public class SnmpClient implements Closeable {
             int messageDispatcherPoolSize
     ) {
         final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
-        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+        final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
+        final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, dispatcherImpl);
 
         if (supportedVersions.contains(SnmpConstants.version1)) {
             dispatcher.addMessageProcessingModel(new MPv1());
@@ -186,6 +189,21 @@ public class SnmpClient implements Closeable {
             final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
+
+            // When enabled, it logs authentication failures from incoming messages
+            if (logger.isDebugEnabled()) {
+                dispatcherImpl.addAuthenticationFailureListener(new AuthenticationFailureListener() {
+                    @Override
+                    public <A extends Address> void authenticationFailure(final AuthenticationFailureEvent<A> event) {
+                        final String message = SnmpConstants.usmErrorMessage(event.getError());
+                        logger.debug("SNMP authentication failed. source: {}, reason: {} ({})",
+                                event.getAddress(),
+                                message,
+                                event.getError());
+
+                    }
+                });
+            }
         }
 
         return dispatcher;
@@ -270,7 +288,7 @@ public class SnmpClient implements Closeable {
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
             trapEvent.put("enterprise", String.valueOf(pdUv1.getEnterprise()));
-            trapEvent.put("agent_addr", String.valueOf(pdUv1.getAgentAddress()));
+            trapEvent.put("agent_addr",  String.valueOf(pdUv1.getAgentAddress()));
             trapEvent.put("generic_trap", pdUv1.getGenericTrap());
             trapEvent.put("specific_trap", pdUv1.getSpecificTrap());
             trapEvent.put("timestamp", pdUv1.getTimestamp());
@@ -429,7 +447,7 @@ public class SnmpClient implements Closeable {
                 case SMIConstants.EXCEPTION_NO_SUCH_OBJECT:
                     return "error: no such object currently exists at this OID";
                 case SMIConstants.EXCEPTION_END_OF_MIB_VIEW:
-                    return "end of MIB view";
+                    return "error: end of MIB view";
                 default:
                     return String.format("error: %s", variable.getSyntaxString());
             }

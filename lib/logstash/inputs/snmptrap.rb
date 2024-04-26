@@ -14,8 +14,8 @@ require 'logstash/plugin_mixins/snmp/common'
 # Read snmp trap messages as events
 #
 # Resulting `@message` looks like :
-# [source,ruby]
-# {"error_index"=>0, "variable_bindings"=>{}, "error_status"=>0, "type"=>"TRAP","error_status_text"=>"Success", "version"=>3, "request_id"=>395545945}
+# [source,json]
+# {"error_index":0,"variable_bindings":{"1.3.6.1.6.3.1.1.4.1.0":"value"},"error_status":0,"type":"TRAP","error_status_text":"Success","version":"3","request_id":145014487}
 #
 class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
 
@@ -161,7 +161,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   def format_trap_message(trap_message)
     trap_event = trap_message.getTrapEvent.to_hash
     trap_event['variable_bindings'] = trap_event['variable_bindings'].to_hash
-    trap_event.inspect
+    LogStash::Json.dump(trap_event)
   end
 
   def add_metadata_fields(event, trap_event)
