@@ -68,9 +68,11 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-oid_root_skip>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-poll_hosts_timeout>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-walk>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-tables>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-threads>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-use_provided_mibs>> |<<boolean,boolean>>|No
 |=======================================================================
 
@@ -266,6 +268,18 @@ which would result in a field name "1.0". Similarly when a MIB is used an OID su
 * You can use this setting or <<plugins-{type}s-{plugin}-oid_root_skip>>, but not both at the same time.
 * This setting can be used only if <<plugins-{type}s-{plugin}-oid_mapping_format>> is set to `default`.
 
+[id="plugins-{type}s-{plugin}-poll_hosts_timeout"]
+===== `poll_hosts_timeout`
+
+  * Value type is <<number,number>>
+  * There is no default value for this setting
+
+Specifies the maximum amount of time in milliseconds the polling client will wait for all <<plugins-{type}s-{plugin}-hosts>> responses.
+If all responses are not received before the timeout elapses, the client will fail and some hosts might not get polled during the current cycle.
+
+By default, it uses the highest value between `1 hour`, the maximum <<plugins-{type}s-{plugin}-hosts>> configured `timeout`,
+and the <<plugins-{type}s-{plugin}-interval>> value.
+
 [id="plugins-{type}s-{plugin}-walk"]
 ===== `walk`
 
@@ -332,6 +346,14 @@ The name of the field under which SNMP payloads are assigned.
 If not specified data will be stored in the root of the event.
 
 Setting a target is recommended when <<plugins-{type}s-{plugin}-ecs_compatibility>> is enabled.
+
+[id="plugins-{type}s-{plugin}-threads"]
+===== `threads`
+
+  * Value type is <<number,number>>
+  * Default value is the number of CPU cores
+
+The number of threads to use for executing the hosts SNMP requests.
 
 [id="plugins-{type}s-{plugin}-use_provided_mibs"]
 ===== `use_provided_mibs`

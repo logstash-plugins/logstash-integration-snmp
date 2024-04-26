@@ -40,6 +40,9 @@ class SmilibPythonMibReader implements MibReader {
                 .collect(Collectors.joining("|"));
     }
 
+    // Should keep using the deprecated constants, so it's compatible with older Jackson
+    // versions used by Logstash 7.x.
+    @SuppressWarnings("deprecation")
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .enable(JsonParser.Feature.ALLOW_TRAILING_COMMA)
             .enable(JsonParser.Feature.ALLOW_COMMENTS)

@@ -4,6 +4,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.logstash.snmp.mib.MibManager;
 import org.logstash.snmp.trap.SnmpTrapMessage;
+import org.snmp4j.CommandResponder;
+import org.snmp4j.CommandResponderEvent;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.MessageDispatcherImpl;
@@ -13,6 +15,8 @@ import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
 import org.snmp4j.UserTarget;
+import org.snmp4j.event.AuthenticationFailureEvent;
+import org.snmp4j.event.AuthenticationFailureListener;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -22,6 +26,7 @@ import org.snmp4j.security.Priv3DES;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
+import org.snmp4j.security.SecurityProtocols.SecurityProtocolSet;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
@@ -52,15 +57,19 @@ import org.snmp4j.util.TreeUtils;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 import static java.util.Objects.nonNull;
@@ -75,6 +84,7 @@ public class SnmpClient implements Closeable {
     private final Set<String> supportedTransports;
     private final Set<Integer> supportedVersions;
     private final CountDownLatch stopCountDownLatch = new CountDownLatch(1);
+    private Duration closeTimeoutDuration = Duration.ofMinutes(1);
     private final String host;
     private final int port;
     private final boolean mapOidVariableValues;
@@ -93,8 +103,8 @@ public class SnmpClient implements Closeable {
             Set<Integer> supportedVersions,
             String host,
             int port,
-            String threadPoolName,
-            int threadPoolSize,
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize,
             List<UsmUser> users,
             OctetString localEngineId,
             boolean mapOidVariableValues
@@ -107,7 +117,7 @@ public class SnmpClient implements Closeable {
         this.mapOidVariableValues = mapOidVariableValues;
 
         // global security models/protocols
-        SecurityProtocols.getInstance().addDefaultProtocols();
+        SecurityProtocols.getInstance().addPredefinedProtocolSet(SecurityProtocolSet.maxCompatibility);
         SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
@@ -121,8 +131,8 @@ public class SnmpClient implements Closeable {
                 port,
                 localEngineId,
                 users,
-                threadPoolName,
-                threadPoolSize
+                messageDispatcherPoolName,
+                messageDispatcherPoolSize
         );
     }
 
@@ -133,8 +143,8 @@ public class SnmpClient implements Closeable {
             int port,
             OctetString localEngineId,
             List<UsmUser> usmUsers,
-            String threadPoolName,
-            int threadPoolSize
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize
     ) throws IOException {
         final int engineBootCount = 0;
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
@@ -142,8 +152,8 @@ public class SnmpClient implements Closeable {
                 supportedVersions,
                 usmUsers,
                 engineBootCount,
-                threadPoolName,
-                threadPoolSize
+                messageDispatcherPoolName,
+                messageDispatcherPoolSize
         );
 
         final Snmp snmp = new Snmp(messageDispatcher);
@@ -159,10 +169,10 @@ public class SnmpClient implements Closeable {
             Set<Integer> supportedVersions,
             List<UsmUser> usmUsers,
             int engineBootCount,
-            String threadPoolName,
-            int threadPoolSize
+            String messageDispatcherPoolName,
+            int messageDispatcherPoolSize
     ) {
-        final ThreadPool threadPool = ThreadPool.create(threadPoolName, threadPoolSize);
+        final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
         final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
         final MessageDispatcher dispatcher = new MultiThreadedMessageDispatcher(threadPool, dispatcherImpl);
 
@@ -181,13 +191,16 @@ public class SnmpClient implements Closeable {
 
             // When enabled, it logs authentication failures from incoming messages
             if (logger.isDebugEnabled()) {
-                dispatcherImpl.addAuthenticationFailureListener(event -> {
-                    final String message = SnmpConstants.usmErrorMessage(event.getError());
-                    logger.debug("SNMP authentication failed. source: {}, reason: {} ({})",
-                            event.getAddress(),
-                            message,
-                            event.getError());
+                dispatcherImpl.addAuthenticationFailureListener(new AuthenticationFailureListener() {
+                    @Override
+                    public <A extends Address> void authenticationFailure(final AuthenticationFailureEvent<A> event) {
+                        final String message = SnmpConstants.usmErrorMessage(event.getError());
+                        logger.debug("SNMP authentication failed. source: {}, reason: {} ({})",
+                                event.getAddress(),
+                                message,
+                                event.getError());
 
+                    }
                 });
             }
         }
@@ -216,31 +229,34 @@ public class SnmpClient implements Closeable {
     void doTrap(String[] communities, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
         final Set<String> allowedCommunities = Set.of(communities);
 
-        getSnmp().addCommandResponder(event -> {
-            logger.debug("SNMP Trap received: {}", event);
-            final int version = event.getMessageProcessingModel();
-            final String securityName = new String(event.getSecurityName());
+        getSnmp().addCommandResponder(new CommandResponder() {
+            @Override
+            public <A extends Address> void processPdu(final CommandResponderEvent<A> event) {
+                logger.debug("SNMP Trap received: {}", event);
+                final int version = event.getMessageProcessingModel();
+                final String securityName = new String(event.getSecurityName());
 
-            // Empty communities means "allow all communities" (BC with ruby-snmp)
-            if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
-                logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
-                return;
+                // Empty communities means "allow all communities" (BC with ruby-snmp)
+                if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
+                    logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
+                    return;
+                }
+
+                final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
+                final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
+                for (VariableBinding binding : event.getPDU().getVariableBindings()) {
+                    formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
+                }
+
+                final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
+                        version,
+                        event.getSecurityName(),
+                        event.getPeerAddress(),
+                        trapEvent,
+                        formattedVarBindings);
+
+                consumer.accept(trapMessage);
             }
-
-            final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
-            final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
-            for (VariableBinding binding : event.getPDU().getVariableBindings()) {
-                formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
-            }
-
-            final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
-                    version,
-                    event.getSecurityName(),
-                    event.getPeerAddress(),
-                    trapEvent,
-                    formattedVarBindings);
-
-            consumer.accept(trapMessage);
         });
 
         getSnmp().listen();
@@ -291,13 +307,13 @@ public class SnmpClient implements Closeable {
         return trapEvent;
     }
 
-    public Map<String, Object> get(Target target, OID[] oids) throws IOException {
+    public Map<String, Object> get(Target<Address> target, OID[] oids) throws IOException {
         validateTargetVersion(target);
 
         final PDU pdu = createPDU(target, PDU.GET);
         pdu.addAll(VariableBinding.createFromOIDs(oids));
 
-        final ResponseEvent responseEvent = getSnmp().send(pdu, target);
+        final ResponseEvent<Address> responseEvent = getSnmp().send(pdu, target);
         if (responseEvent == null) {
             return Collections.emptyMap();
         }
@@ -324,7 +340,7 @@ public class SnmpClient implements Closeable {
         return result;
     }
 
-    public Map<String, Object> walk(Target target, OID oid) {
+    public Map<String, Object> walk(Target<Address> target, OID oid) {
         validateTargetVersion(target);
 
         final TreeUtils treeUtils = createGetTreeUtils();
@@ -371,11 +387,11 @@ public class SnmpClient implements Closeable {
         return new TreeUtils(getSnmp(), creatPDUFactory(PDU.GET));
     }
 
-    public Map<String, List<Map<String, Object>>> table(Target target, String tableName, Collection<OID> oids) {
+    public Map<String, List<Map<String, Object>>> table(Target<Address> target, String tableName, OID[] oids) {
         validateTargetVersion(target);
 
         final TableUtils tableUtils = createGetTableUtils();
-        final List<TableEvent> events = tableUtils.getTable(target, oids.toArray(new OID[0]), null, null);
+        final List<TableEvent> events = tableUtils.getTable(target, oids, null, null);
 
         if (events == null || events.isEmpty()) {
             return Collections.emptyMap();
@@ -400,7 +416,7 @@ public class SnmpClient implements Closeable {
             }
 
             final Map<String, Object> row = new HashMap<>();
-            row.put("index", event.getIndex().toString());
+            row.put("index", String.valueOf(event.getIndex()));
 
             for (final VariableBinding binding : variableBindings) {
                 if (binding == null) {
@@ -464,13 +480,13 @@ public class SnmpClient implements Closeable {
         }
     }
 
-    private void validateTargetVersion(Target target) {
+    private void validateTargetVersion(Target<Address> target) {
         if (!this.supportedVersions.contains(target.getVersion())) {
             throw new SnmpClientException(String.format("SNMP version `%s` is disabled", parseSnmpVersion(target.getVersion())));
         }
     }
 
-    public Target createTarget(
+    public Target<Address> createTarget(
             String address,
             String version,
             int retries,
@@ -480,13 +496,13 @@ public class SnmpClient implements Closeable {
             String securityLevel
     ) {
         final int snmpVersion = parseSnmpVersion(version);
-        final Target target;
+        final Target<Address> target;
 
         if (snmpVersion == SnmpConstants.version3) {
             Objects.requireNonNull(securityName, "security_name is required");
             Objects.requireNonNull(securityLevel, "security_level is required");
 
-            target = new UserTarget();
+            target = new UserTarget<>();
             target.setSecurityLevel(parseSecurityLevel(securityLevel));
             target.setSecurityName(new OctetString(securityName));
             if (address.startsWith("tls")) {
@@ -494,11 +510,16 @@ public class SnmpClient implements Closeable {
             }
         } else {
             Objects.requireNonNull(community, "community is required");
-            target = new CommunityTarget();
-            ((CommunityTarget) target).setCommunity(new OctetString(community));
+            target = new CommunityTarget<>();
+            ((CommunityTarget<Address>) target).setCommunity(new OctetString(community));
         }
 
-        target.setAddress(GenericAddress.parse(address));
+        final Address targetAddress = GenericAddress.parse(address);
+        if (targetAddress == null) {
+            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", address));
+        }
+
+        target.setAddress(targetAddress);
         target.setVersion(snmpVersion);
         target.setRetries(retries);
         target.setTimeout(timeout);
@@ -510,7 +531,7 @@ public class SnmpClient implements Closeable {
         return new DefaultPDUFactory(pduType);
     }
 
-    private PDU createPDU(Target target, int pduType) {
+    private PDU createPDU(Target<Address> target, int pduType) {
         final PDU pdu;
         if (target.getVersion() == SnmpConstants.version3) {
             pdu = new ScopedPDU();
@@ -539,13 +560,13 @@ public class SnmpClient implements Closeable {
             case "tls":
                 return new TlsAddress(address);
             default:
-                throw new SnmpClientException(String.format("invalid transport protocol specified '%s', expecting 'udp', 'tcp' or 'tls'", protocol));
+                throw new SnmpClientException(String.format("Invalid transport protocol specified '%s', expecting 'udp', 'tcp' or 'tls'", protocol));
         }
     }
 
     private static AbstractTransportMapping<? extends Address> createTransport(Address address) throws IOException {
         if (address instanceof TlsAddress) {
-            return new TLSTM();
+            return new TLSTM((TlsAddress) address);
         }
 
         if (address instanceof TcpAddress) {
@@ -555,8 +576,34 @@ public class SnmpClient implements Closeable {
         return new DefaultUdpTransportMapping((UdpAddress) address);
     }
 
+    SnmpClient setCloseTimeoutDuration(Duration closeTimeoutDuration) {
+        this.closeTimeoutDuration = closeTimeoutDuration;
+        return this;
+    }
+
     @Override
     public void close() {
+        try {
+            // The async close and timeout are necessary here due to an existing
+            // race-condition in the SNMP4j ThreadPool class (v3.8.0). Such class
+            // might block if the pool #stop gets invoked before the #run reaches
+            // the #wait for new tasks, which is never notified. It affects mainly
+            // tests, where the client is closed very often.
+            CompletableFuture.runAsync(this::closeSnmpClient)
+                    .get(closeTimeoutDuration.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            logger.error("Current thread was interrupted while closing the SNMP client. Aborting", e);
+            Thread.currentThread().interrupt();
+        } catch (TimeoutException e) {
+            logger.error("Timed out while closing the SNMP client. Ignoring", e);
+        } catch (ExecutionException e) {
+            logger.error("Error closing the SNMP client. Ignoring", e.getCause());
+        } catch (Exception e) {
+            logger.error("Unexpected error closing the SNMP client. Ignoring", e);
+        }
+    }
+
+    private void closeSnmpClient() {
         try {
             snmp.close();
         } catch (Exception e) {

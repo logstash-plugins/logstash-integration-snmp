@@ -10,6 +10,7 @@ import org.logstash.snmp.mib.MibManager;
 import org.logstash.snmp.trap.SnmpTrapMessage;
 import org.mockito.ArgumentCaptor;
 import org.snmp4j.CommandResponderEvent;
+import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
 import org.snmp4j.PDU;
 import org.snmp4j.PDUv1;
@@ -17,6 +18,7 @@ import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
 import org.snmp4j.TransportMapping;
+import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
@@ -26,6 +28,7 @@ import org.snmp4j.security.AuthHMAC192SHA256;
 import org.snmp4j.security.AuthMD5;
 import org.snmp4j.security.Priv3DES;
 import org.snmp4j.security.PrivacyProtocol;
+import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
@@ -33,9 +36,11 @@ import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
 import org.snmp4j.security.UsmUserEntry;
+import org.snmp4j.smi.Address;
 import org.snmp4j.smi.Counter32;
 import org.snmp4j.smi.Counter64;
 import org.snmp4j.smi.Gauge32;
+import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.Integer32;
 import org.snmp4j.smi.IpAddress;
 import org.snmp4j.smi.Null;
@@ -56,6 +61,7 @@ import org.snmp4j.util.TreeEvent;
 import org.snmp4j.util.TreeUtils;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +90,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SnmpClientTest {
-    private static final String HOST = "127.0.0.1";
+    private static final Duration CLIENT_CLOSE_TIMEOUT = Duration.ofSeconds(5);
+    private static final String HOST_ADDRESS = "localhost/161";
     private static final int PORT = 1069;
     private static final String LOCAL_ENGINE_ID = new String(MPv3.createLocalEngineID());
     private static final UsmUser USER = new UsmUser(
@@ -227,14 +234,14 @@ class SnmpClientTest {
         // through the global security model repository. Otherwise, users with the same name
         // but different passwords would conflict.
         final OctetString securityName = new OctetString("root");
-        try (final SnmpClient clientOne = SnmpClient.builder(mibManager, Set.of("tcp"), PORT)
+        try (final SnmpClient clientOne = creatEmptyClientBuilder(mibManager, Set.of("tcp"), PORT)
                 .addUsmUser(securityName.toString(),
                         "hmac192sha256",
                         "client-one-pass",
                         "3des",
                         "client-one-pass"
                 ).build();
-             final SnmpClient clientTwo = SnmpClient.builder(mibManager, Set.of("tcp"), PORT + 1)
+             final SnmpClient clientTwo = creatEmptyClientBuilder(mibManager, Set.of("tcp"), PORT + 1)
                      .addUsmUser(securityName.toString(),
                              "md5",
                              "client-two-pass",
@@ -357,9 +364,9 @@ class SnmpClientTest {
 
         doReturn(null)
                 .when(snmp)
-                .send(pduCaptor.capture(), any(Target.class));
+                .send(pduCaptor.capture(), any());
 
-        final Target v3Target = createTarget(clientSpy, HOST, targetVersion);
+        final Target<Address> v3Target = createTarget(clientSpy, HOST_ADDRESS, targetVersion);
         clientSpy.get(v3Target, expectedBindings);
 
         final PDU sentPdu = pduCaptor.getValue();
@@ -385,10 +392,10 @@ class SnmpClientTest {
 
             doReturn(null)
                     .when(snmp)
-                    .send(any(PDU.class), any(Target.class));
+                    .send(any(PDU.class), any());
 
             final Map<String, Object> response = client
-                    .get(mock(Target.class), new OID[]{new OID("1")});
+                    .get(mock(), new OID[]{new OID("1")});
 
             assertTrue(response.isEmpty());
         }
@@ -398,7 +405,7 @@ class SnmpClientTest {
     void getWithErrorResponseShouldThrow() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
-            final ResponseEvent responseEvent = mock(ResponseEvent.class);
+            final ResponseEvent<Address> responseEvent = mock();
 
             when(client.getSnmp())
                     .thenReturn(snmp);
@@ -408,9 +415,9 @@ class SnmpClientTest {
 
             doReturn(responseEvent)
                     .when(snmp)
-                    .send(any(PDU.class), any(Target.class));
+                    .send(any(PDU.class), any());
 
-            final Target target = createTarget(client, "tcp:192.168.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
             final OID[] oids = new OID[]{new OID("1")};
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -428,16 +435,16 @@ class SnmpClientTest {
     void getWithNullResponseShouldThrowTimeoutException() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
-            final ResponseEvent responseEvent = mock(ResponseEvent.class);
+            final ResponseEvent<Address> responseEvent = mock();
 
             when(client.getSnmp())
                     .thenReturn(snmp);
 
             doReturn(responseEvent)
                     .when(snmp)
-                    .send(any(PDU.class), any(Target.class));
+                    .send(any(PDU.class), any());
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
             final OID[] oids = new OID[]{new OID("1")};
 
             final SnmpClientException exception = assertThrows(
@@ -460,7 +467,7 @@ class SnmpClientTest {
             when(client.getSnmp())
                     .thenReturn(snmp);
 
-            final ResponseEvent responseEvent = mock(ResponseEvent.class);
+            final ResponseEvent<Address> responseEvent = mock();
             final List<VariableBinding> responseVariables = List.of(
                     new VariableBinding(new OID("1.1"), new OctetString("foo")),
                     new VariableBinding(new OID("1.2"), new OctetString("bar"))
@@ -472,12 +479,12 @@ class SnmpClientTest {
 
             doReturn(responseEvent)
                     .when(snmp)
-                    .send(any(PDU.class), any(Target.class));
+                    .send(any(PDU.class), any());
 
             when(mibManager.map(any(OID.class)))
                     .thenReturn("iso.foo", "iso.bar");
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
             final Map<String, Object> response = client.get(target, new OID[]{new OID("1.1"), new OID("1.2")});
 
             assertFalse(response.isEmpty());
@@ -493,7 +500,7 @@ class SnmpClientTest {
                 .setSupportedVersions(Set.of("2c"))
                 .build()) {
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -514,9 +521,9 @@ class SnmpClientTest {
 
             doReturn(null, List.of())
                     .when(treeUtils)
-                    .getSubtree(any(Target.class), any(OID.class));
+                    .getSubtree(any(), any(OID.class));
 
-            final Target target = createTarget(client, HOST, "1");
+            final Target<Address> target = createTarget(client, HOST_ADDRESS, "1");
             assertTrue(client.walk(target, new OID("1")).isEmpty());
             assertTrue(client.walk(target, new OID("2")).isEmpty());
         }
@@ -540,9 +547,9 @@ class SnmpClientTest {
 
             doReturn(List.of(event))
                     .when(treeUtils)
-                    .getSubtree(any(Target.class), any(OID.class));
+                    .getSubtree(any(), any(OID.class));
 
-            final Target target = createTarget(client, "tcp:192.168.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
             final OID oid = new OID("1.2.3");
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -575,12 +582,12 @@ class SnmpClientTest {
 
             doReturn(List.of(event))
                     .when(treeUtils)
-                    .getSubtree(any(Target.class), any(OID.class));
+                    .getSubtree(any(), any(OID.class));
 
             when(mibManager.map(any(OID.class)))
                     .thenReturn("iso.foo", "iso.bar");
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
             final Map<String, Object> response = client.walk(target, new OID("1"));
 
             assertFalse(response.isEmpty());
@@ -596,7 +603,7 @@ class SnmpClientTest {
                 .setSupportedVersions(Set.of("2c"))
                 .build()) {
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -617,11 +624,11 @@ class SnmpClientTest {
 
             doReturn(null, List.of())
                     .when(tableUtils)
-                    .getTable(any(Target.class), any(OID[].class), isNull(), isNull());
+                    .getTable(any(), any(OID[].class), isNull(), isNull());
 
-            final Target target = createTarget(client, HOST, "1");
-            assertTrue(client.table(target, "fooTable", List.of(new OID("1"))).isEmpty());
-            assertTrue(client.table(target, "barTable", List.of(new OID("2"))).isEmpty());
+            final Target<Address> target = createTarget(client, HOST_ADDRESS, "1");
+            assertTrue(client.table(target, "fooTable", new OID[]{new OID("1")}).isEmpty());
+            assertTrue(client.table(target, "barTable", new OID[]{new OID("2")}).isEmpty());
         }
     }
 
@@ -643,10 +650,10 @@ class SnmpClientTest {
 
             doReturn(List.of(event))
                     .when(tableUtils)
-                    .getTable(any(Target.class), any(OID[].class), isNull(), isNull());
+                    .getTable(any(), any(OID[].class), isNull(), isNull());
 
-            final Target target = createTarget(client, "tcp:192.168.1.1/161", "3");
-            final List<OID> oids = List.of(new OID("1.2.3"));
+            final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
+            final OID[] oids = {new OID("1.2.3")};
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
@@ -681,15 +688,15 @@ class SnmpClientTest {
 
             doReturn(List.of(eventOne, eventTwo))
                     .when(tableUtils)
-                    .getTable(any(Target.class), any(OID[].class), isNull(), isNull());
+                    .getTable(any(), any(OID[].class), isNull(), isNull());
 
             when(mibManager.map(any(OID.class)))
                     .thenReturn("one.foo", "one.bar", "two.foo", "two.bar");
 
             final String tableName = "fooBarTable";
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "3");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "3");
 
-            final var response = client.table(target, tableName, List.of(new OID("1")));
+            final var response = client.table(target, tableName, new OID[]{new OID("1")});
             assertFalse(response.isEmpty());
             Arrays.stream(responseVariables)
                     .forEach(binding -> verify(client, times(2)).coerceVariable(binding.getVariable()));
@@ -716,11 +723,11 @@ class SnmpClientTest {
                 .setSupportedVersions(Set.of("1"))
                 .build()) {
 
-            final Target target = createTarget(client, "tcp:192.2.1.1/161", "2c");
+            final Target<Address> target = createTarget(client, "tcp:192.2.1.1/161", "2c");
 
             final SnmpClientException exception = assertThrows(
                     SnmpClientException.class,
-                    () -> client.table(target, "FOO", List.of(new OID("1.1")))
+                    () -> client.table(target, "FOO", new OID[]{new OID("1.1")})
             );
 
             assertEquals("SNMP version `2c` is disabled", exception.getMessage());
@@ -847,7 +854,7 @@ class SnmpClientTest {
             // Start traps client with non-blocking latch
             client.doTrap(allowedCommunities, ignore -> called[0] = true, new CountDownLatch(0));
 
-            final CommandResponderEvent responderEvent = mock(CommandResponderEvent.class);
+            final CommandResponderEvent<Address> responderEvent = mock();
             when(responderEvent.getSecurityModel())
                     .thenReturn(1);
             when(responderEvent.getSecurityName())
@@ -931,8 +938,7 @@ class SnmpClientTest {
         assertEquals(pdUv1.getSpecificTrap(), trapEvent.remove("specific_trap"));
         assertEquals(pdUv1.getTimestamp(), trapEvent.remove("timestamp"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         pdUv1.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -975,8 +981,7 @@ class SnmpClientTest {
         assertEquals(pdu.getErrorIndex(), trapEvent.remove("error_index"));
         assertEquals(TRAP_SECURITY_NAME, trapEvent.remove("community"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         pdu.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -1018,8 +1023,7 @@ class SnmpClientTest {
         assertEquals(scopedPDU.getErrorStatusText(), trapEvent.remove("error_status_text"));
         assertEquals(scopedPDU.getErrorIndex(), trapEvent.remove("error_index"));
 
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
+        @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         scopedPDU.getVariableBindings().forEach(binding -> assertEquals(
                 binding.getVariable().toString(),
                 variableBindings.remove(binding.getOid().toString()))
@@ -1047,7 +1051,7 @@ class SnmpClientTest {
             final SnmpTrapMessage[] message = new SnmpTrapMessage[1];
             client.doTrap(new String[0], p -> message[0] = p, new CountDownLatch(0));
 
-            final CommandResponderEvent responderEvent = mock(CommandResponderEvent.class);
+            final CommandResponderEvent<Address> responderEvent = mock();
             when(responderEvent.getMessageProcessingModel())
                     .thenReturn(version);
 
@@ -1073,7 +1077,86 @@ class SnmpClientTest {
         }
     }
 
-    private Target createTarget(SnmpClient client, String address, String version) {
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2c"})
+    void createTargetV1AndV2ShouldRequireCommunity(String version) throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, version, 1, 1, null, null, null)
+            );
+            assertEquals("community is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetWithUnknownHostShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> client.createTarget("udp:unknown/161", "1", 1, 1, "public", null, null)
+            );
+
+            assertEquals("Invalid or unknown host address: `udp:unknown/161`", exception.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "2c"})
+    void createTargetV1andV2ShouldCreateCommunityTarget(String version) throws IOException {
+        try (SnmpClient client = createClient()) {
+            final Target<Address> target = client.createTarget(HOST_ADDRESS, version, 10, 2000, "home", null, null);
+
+            assertInstanceOf(CommunityTarget.class, target);
+            final CommunityTarget<Address> communityTarget = (CommunityTarget<Address>) target;
+            assertEquals(GenericAddress.parse(HOST_ADDRESS), communityTarget.getAddress());
+            assertEquals(SnmpUtils.parseSnmpVersion(version), communityTarget.getVersion());
+            assertEquals(2000, communityTarget.getTimeout());
+            assertEquals(10, communityTarget.getRetries());
+            assertEquals("home", communityTarget.getCommunity().toString());
+            assertEquals(SecurityLevel.NOAUTH_NOPRIV, communityTarget.getSecurityLevel());
+        }
+    }
+
+    @Test
+    void createTargetV3WithoutSecurityNameShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, "3", 1, 1, null, null, "noauthnopriv")
+            );
+            assertEquals("security_name is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetV3WithoutSecurityLevelShouldThrow() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final NullPointerException npe = assertThrows(
+                    NullPointerException.class,
+                    () -> client.createTarget(HOST_ADDRESS, "3", 1, 1, null, "guest", null)
+            );
+            assertEquals("security_level is required", npe.getMessage());
+        }
+    }
+
+    @Test
+    void createTargetV3ShouldCreateUserTarget() throws IOException {
+        try (SnmpClient client = createClient()) {
+            final Target<Address> target = client.createTarget(HOST_ADDRESS, "3", 5, 1000, null, "myUser", "authpriv");
+
+            assertInstanceOf(UserTarget.class, target);
+            final UserTarget<Address> userTarget = (UserTarget<Address>) target;
+            assertEquals(GenericAddress.parse(HOST_ADDRESS), userTarget.getAddress());
+            assertEquals(SnmpConstants.version3, userTarget.getVersion());
+            assertEquals(1000, userTarget.getTimeout());
+            assertEquals(5, userTarget.getRetries());
+            assertEquals("myUser", userTarget.getSecurityName().toString());
+            assertEquals(SecurityLevel.AUTH_PRIV, userTarget.getSecurityLevel());
+        }
+    }
+
+    private Target<Address> createTarget(SnmpClient client, String address, String version) {
         return client.createTarget(
                 address,
                 version,
@@ -1090,13 +1173,15 @@ class SnmpClientTest {
     }
 
     private SnmpClient createClient(Set<String> protocols) throws IOException {
-        return createClientBuilder(protocols).build();
+        return createClientBuilder(protocols)
+                .setCloseTimeoutDuration(CLIENT_CLOSE_TIMEOUT)
+                .build();
     }
 
     private SnmpClientBuilder createClientBuilder(Set<String> protocols) {
-        return SnmpClient.builder(mibManager, protocols, PORT)
-                .setThreadPoolName("FooBarWorker")
-                .setThreadPoolSize(1)
+        return creatEmptyClientBuilder(mibManager, protocols, PORT)
+                .setMessageDispatcherPoolName("FooBarWorker")
+                .setMessageDispatcherPoolSize(1)
                 .setLocalEngineId(LOCAL_ENGINE_ID)
                 .addUsmUser(
                         USER.getSecurityName().toString(),
@@ -1104,5 +1189,10 @@ class SnmpClientTest {
                         USER.getAuthenticationPassphrase().toString(),
                         "des",
                         USER.getPrivacyPassphrase().toString());
+    }
+
+    private SnmpClientBuilder creatEmptyClientBuilder(MibManager mib, Set<String> protocols, int port){
+        return SnmpClient.builder(mib, protocols, port)
+                .setCloseTimeoutDuration(CLIENT_CLOSE_TIMEOUT);
     }
 }
