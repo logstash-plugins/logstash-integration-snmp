@@ -446,7 +446,7 @@ public class SnmpClient implements Closeable {
                 case SMIConstants.EXCEPTION_NO_SUCH_OBJECT:
                     return "error: no such object currently exists at this OID";
                 case SMIConstants.EXCEPTION_END_OF_MIB_VIEW:
-                    return "end of MIB view";
+                    return "error: end of MIB view";
                 default:
                     return String.format("error: %s", variable.getSyntaxString());
             }

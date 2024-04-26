@@ -22,7 +22,7 @@ module LogStash
 
           # This plugin provides sets of MIBs publicly available. The full paths to these provided MIBs paths
           # Will be displayed at plugin startup.
-          base.config :use_provided_mibs, :validate => :boolean, :default => default_use_provided_mibs(base)
+          base.config :use_provided_mibs, :validate => :boolean, :default => true
 
           # List of paths of MIB (.dic, .yaml) files of dirs. If a dir path is specified, all files with
           # .dic and .yaml extension will be loaded.
@@ -46,11 +46,11 @@ module LogStash
           # 1.3.6.1.2.1.1.2.0 -> iso.org.dod.internet.mgmt.mib-2.system.sysObjectID.0
           # `dotted_string` does not change the OID format and map fields using the dotted string format, E.g:
           # 1.3.6.1.2.1.1.2.0 -> 1.3.6.1.2.1.1.2.0
-          base.config :oid_mapping_format, :validate => %w[default ruby_snmp dotted_string], :default => default_oid_mapping_format(base)
+          base.config :oid_mapping_format, :validate => %w[default ruby_snmp dotted_string], :default => 'default'
 
           # Defines if the Logstash event field values, which types are `OID`, are mapped using the configured OID textual representation
           # set on the `oid_mapping_format`.
-          base.config :oid_map_field_values, :validate => :boolean, :default => default_oid_map_field_values(base)
+          base.config :oid_map_field_values, :validate => :boolean, :default => false
 
           # Number of OID root digits to ignore in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting oid_root_skip => 5
@@ -191,34 +191,6 @@ module LogStash
             errors << "`#{pass_config_name}` passphrase must be at least 8 bytes long"
           end
         end
-
-        def self.snmptrap_plugin?(base)
-          !defined?(LogStash::Inputs::Snmptrap).nil? && base == LogStash::Inputs::Snmptrap
-        end
-
-        private_class_method :snmptrap_plugin?
-
-        def self.default_oid_mapping_format(base)
-          if snmptrap_plugin?(base)
-            OID_MAPPING_FORMAT_RUBY_SNMP
-          else
-            OID_MAPPING_FORMAT_DEFAULT
-          end
-        end
-
-        private_class_method :default_oid_mapping_format
-
-        def self.default_use_provided_mibs(base)
-          !snmptrap_plugin?(base)
-        end
-
-        private_class_method :default_use_provided_mibs
-
-        def self.default_oid_map_field_values(base)
-          snmptrap_plugin?(base)
-        end
-
-        private_class_method :default_oid_map_field_values
       end
     end
   end

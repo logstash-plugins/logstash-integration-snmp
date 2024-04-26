@@ -234,6 +234,18 @@ shared_examples 'a common SNMP plugin' do
       end
     end
   end
+
+  it 'should default `use_provided_mibs` to `true`' do
+    expect(plugin.config['use_provided_mibs']).to eql(true)
+  end
+
+  it 'should default `oid_mapping_format` to `default`' do
+    expect(plugin.config['oid_mapping_format']).to eql('default')
+  end
+
+  it 'should default `oid_map_field_values` to `false`' do
+    expect(plugin.config['oid_map_field_values']).to  eql(false)
+  end
 end
 
 describe 'SNMP input plugins' do
@@ -244,33 +256,9 @@ describe 'SNMP input plugins' do
     let(:config) { { 'get' => ['1.3.6.1.2.1.1.1.0'], 'hosts' => [{'host' => 'udp:127.0.0.1/161'}] } }
 
     it_behaves_like 'a common SNMP plugin'
-
-    it 'should default `use_provided_mibs` to `true`' do
-      expect(plugin.config['use_provided_mibs']).to eql(true)
-    end
-
-    it 'should default `oid_mapping_format` to `default`' do
-      expect(plugin.config['oid_mapping_format']).to eql('default')
-    end
-
-    it 'should default `oid_map_field_values` to `false`' do
-      expect(plugin.config['oid_map_field_values']).to eql(false)
-    end
   end
 
   describe LogStash::Inputs::Snmptrap do
     it_behaves_like 'a common SNMP plugin'
-
-    it 'should default `use_provided_mibs` to `false`' do
-      expect(plugin.config['use_provided_mibs']).to eql(false)
-    end
-
-    it 'should default `oid_mapping_format` to `ruby_snmp`' do
-      expect(plugin.config['oid_mapping_format']).to eql('ruby_snmp')
-    end
-
-    it 'should default `oid_map_field_values` to `true`' do
-      expect(plugin.config['oid_map_field_values']).to  eql(true)
-    end
   end
 end
