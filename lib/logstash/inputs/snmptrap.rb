@@ -36,11 +36,11 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   config_name 'snmptrap'
 
   # The address to listen on
-  config :host, :validate => :string, :default => '0.0.0.0'
+  config :host, :validate => :string, :required => true, :default => '0.0.0.0'
 
   # The port to listen on. Remember that ports less than 1024 (privileged
   # ports) may require root to use. hence the default of 1062.
-  config :port, :validate => :number, :default => 1062
+  config :port, :validate => :number, :required => true, :default => 1062
 
   # The supported transport protocols to listen on.
   config :supported_transports, :validate => %w[tcp udp], :default => %w[udp], :required => true, :list => true
@@ -125,6 +125,7 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   def build_client!(mib_manager)
     client_builder = org.logstash.snmp.SnmpClient
                         .builder(mib_manager, @supported_transports.to_set, @port)
+                        .setHost(@host)
                         .setSupportedVersions(@supported_versions.to_set)
                         .setMessageDispatcherPoolName('SnmpTrapMessageDispatcherWorker')
                         .setMessageDispatcherPoolSize(@threads)

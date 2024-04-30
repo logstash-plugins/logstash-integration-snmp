@@ -2,6 +2,7 @@ require 'logstash/devutils/rspec/spec_helper'
 require 'logstash/inputs/snmptrap'
 require 'logstash-integration-snmp_jars'
 require 'timeout'
+require 'socket'
 
 describe LogStash::Inputs::Snmptrap, :integration => true do
 
@@ -316,6 +317,36 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         expect(event.get('TCP-MIB::tcp')).to_not be_nil
         expect(event.get('UDP-MIB::udpInDatagrams')).to_not be_nil
         expect(event.get('SNMPv2-SMI::mib-2.60')).to_not be_nil
+      end
+    end
+
+    context 'with host' do
+      context 'set to IP address' do
+        let(:ip_address) { IPSocket.getaddress(Socket.gethostname) }
+        let(:config) { super().merge('host' => ip_address, 'oid_mapping_format' => 'dotted_string')}
+
+        it "should only received message through configured host" do
+          queue = run_plugin_and_get_queue(plugin, messages: 2, timeout: 5) do
+            @trap_sender.send_trap_v2c("udp:#{ip_address}/#{port}", 'public', { '1.3.6.1.2.1.1.2.0' => ip_address })
+            @trap_sender.send_trap_v2c("udp:127.0.0.1/#{port}", 'public', { '1.3.6.1.2.1.1.2.0' => 'INVALID' })
+          end
+
+          expect(queue.size).to eq(1)
+          expect(queue.pop.get('1.3.6.1.2.1.1.2.0')).to eq(ip_address)
+        end
+      end
+
+      context 'set to any IPV6 address' do
+        let(:config) { super().merge('host' => '::', 'oid_mapping_format' => 'dotted_string') }
+
+        it "should received message through localhost" do
+          queue = run_plugin_and_get_queue(plugin, messages: 2, timeout: 5) do
+            @trap_sender.send_trap_v2c("udp:localhost/#{port}", 'public', { '1.3.6.1.2.1.1.2.0' => 'IPV6' })
+          end
+
+          expect(queue.size).to eq(1)
+          expect(queue.pop.get('1.3.6.1.2.1.1.2.0')).to eq('IPV6')
+        end
       end
     end
   end
