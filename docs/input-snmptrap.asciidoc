@@ -23,12 +23,22 @@ END - GENERATED VARIABLES, DO NOT EDIT!
 
 ==== Description
 
-Read SNMP trap messages as events
+The `logstash-input-snmptrap` plugin reads SNMP trap messages as events.
 
 Resulting `message` field resembles:
 [source,json]
 {"agent_addr":"192.168.1.40", "generic_trap":6, "specific_trap":15511, "enterprise":"1.3.6.1.2.1.1.1", "variable_bindings":{"1.3.6.1.2.1.1.2.0":"test one", "1.3.6.1.2.1.1.1.0":"test two"}, "type":"V1TRAP", "community":"public", "version":1, "timestamp":1500}
 
+.Migrating to `logstash-integration-snmp` from stand-alone `input-snmptrap`
+**** 
+The `logstash-input-snmptrap` plugin is now a component of the `logstash-integration-snmp` plugin. 
+This integrated plugin package provides better alignment in snmp processing, better resource management, 
+easier package maintenance, and a smaller installation footprint. 
+
+For migration information and guidelines, check out the migration guide.
+**** 
+
+// TODO: Add link to migration topic in the integration index. 
 
 [id="plugins-{type}s-{plugin}-ecs"]
 ==== Event Metadata and the Elastic Common Schema (ECS)
@@ -67,8 +77,12 @@ which variable binding in the list caused the error
 [id="plugins-{type}s-{plugin}-import-mibs"]
 ==== Importing MIBs
 
-This plugin already includes the IETF MIBs (management information bases) and these do not need to be imported.
-Any other MIB will need to be manually imported following the {logstash-ref}/plugins-integrations-snmp.html[Importing MIBs] guideline.
+This plugin already includes the IETF MIBs (management information bases), and you do not need to import them.
+If you need additional MIBs, you need to important them.  
+Check out "Importing MIBs" for instructions.
+
+// ToDo: Add link to MIBs content after generated file exists.
+
 
 [id="plugins-{type}s-{plugin}-options"]
 ==== SNMP Trap Input Configuration Options

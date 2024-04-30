@@ -18,8 +18,8 @@ END - GENERATED VARIABLES, DO NOT EDIT!
 
 === SNMP input plugin
 
-//Uncomment after generated the initial versions of the target file
-//include::{include_path}/plugin_header-integration.asciidoc[]
+// Uncomment after generated the initial versions of the target file
+// include::{include_path}/plugin_header-integration.asciidoc[]
 
 ==== Description
 
@@ -27,6 +27,17 @@ The SNMP input polls network devices using Simple Network Management Protocol (S
 to gather information related to the current state of the devices operation.
 
 The SNMP input plugin supports SNMP v1, v2c, and v3 over UDP and TCP transport protocols.
+
+.Migrating to `logstash-integration-snmp` from stand-alone `input-snmp`
+**** 
+The `logstash-input-snmp` plugin is now a component of the `logstash-integration-snmp` plugin. 
+This integrated plugin package provides better alignment in snmp processing, better resource management, 
+easier package maintenance, and a smaller installation footprint. 
+
+For migration information and guidelines, check out the migration guide.
+**** 
+
+// TODO: Add link to migration topic in the integration index. 
 
 [id="plugins-{type}s-{plugin}-ecs"]
 ==== Compatibility with the Elastic Common Schema (ECS)
@@ -47,8 +58,11 @@ Metadata fields follow a specific naming convention when <<plugins-{type}s-{plug
 [id="plugins-{type}s-{plugin}-import-mibs"]
 ==== Importing MIBs 
 
-This plugin already includes the IETF MIBs (management information bases) and these do not need to be imported.
-Any other MIB will need to be manually imported following the {logstash-ref}/plugins-integrations-snmp.html[Importing MIBs] guideline.
+This plugin already includes the IETF MIBs (management information bases), and you do not need to import them.
+If you need additional MIBs, you need to important them.  
+Check out "Importing MIBs" for instructions.
+
+// ToDo: Add link to MIBs content after generated file exists.
 
 [id="plugins-{type}s-{plugin}-options"]
 ==== SNMP Input Configuration Options
@@ -420,15 +434,6 @@ Authentication, No Privacy; Authentication, Privacy; or no Authentication, no Pr
   * There is no default value for this setting
 
 The `security_name` option specifies the SNMPv3 security name or user name.
-
-[id="plugins-{type}s-{plugin}-use_provided_mibs"]
-===== `use_provided_mibs`
-
-  * Value type is <<boolean,boolean>>
-  * Default value is `true`
-
-This plugin provides all IETF MIBs (management information bases), publicly available in the https://www.ibr.cs.tu-bs.de/projects/libsmi[libsmi] version `0.5.0`.
-When enabled, it automatically loads the bundled MIBs and provides mapping of the numeric OIDs to MIB field names in the resulting event.
 
 [id="plugins-{type}s-{plugin}-examples"]
 ==== Configuration examples
