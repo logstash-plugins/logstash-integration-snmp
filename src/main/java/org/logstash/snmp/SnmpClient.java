@@ -14,6 +14,7 @@ import org.snmp4j.PDUv1;
 import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
+import org.snmp4j.TransportMapping;
 import org.snmp4j.UserTarget;
 import org.snmp4j.event.AuthenticationFailureEvent;
 import org.snmp4j.event.AuthenticationFailureListener;
@@ -286,8 +287,8 @@ public class SnmpClient implements Closeable {
             trapEvent.put("error_index", pdu.getErrorIndex());
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
-            trapEvent.put("enterprise", pdUv1.getEnterprise().toString());
-            trapEvent.put("agent_addr", pdUv1.getAgentAddress().toString());
+            trapEvent.put("enterprise", String.valueOf(pdUv1.getEnterprise()));
+            trapEvent.put("agent_addr",  String.valueOf(pdUv1.getAgentAddress()));
             trapEvent.put("generic_trap", pdUv1.getGenericTrap());
             trapEvent.put("specific_trap", pdUv1.getSpecificTrap());
             trapEvent.put("timestamp", pdUv1.getTimestamp());
@@ -615,5 +616,13 @@ public class SnmpClient implements Closeable {
 
     final Snmp getSnmp() {
         return snmp;
+    }
+
+    public boolean isListening() {
+        return getSnmp()
+                .getMessageDispatcher()
+                .getTransportMappings()
+                .stream()
+                .allMatch(TransportMapping::isListening);
     }
 }
