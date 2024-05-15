@@ -2,9 +2,18 @@ import java.nio.file.Files
 
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING
 
-apply plugin: 'java'
-apply plugin: 'idea'
-apply plugin: 'maven-publish'
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+  id 'java'
+  id 'idea'
+  id 'maven-publish'
+}
 
 group "org.logstash.integrations"
 version "${new File("VERSION").text.trim()}"
@@ -16,14 +25,9 @@ String log4jVersion = '2.17.0'
 String jacksonVersion = '2.15.3'
 String mockitoVersion = '5.9.0'
 
-sourceCompatibility = JavaVersion.VERSION_11
-targetCompatibility = JavaVersion.VERSION_11
-
-buildscript {
-    repositories {
-        mavenCentral()
-        gradlePluginPortal()
-    }
+java {
+  sourceCompatibility = JavaVersion.VERSION_1_8
+  targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 repositories {
