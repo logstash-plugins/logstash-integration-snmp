@@ -18,8 +18,21 @@ END - GENERATED VARIABLES, DO NOT EDIT!
 
 === SNMP trap input plugin
 
-//Uncomment after generated the initial versions of the target file
-//include::{include_path}/plugin_header-integration.asciidoc[]
+include::{include_path}/plugin_header-integration.asciidoc[]
+
+experimental[]
+
+.Technical Preview
+****
+The new `integration-snmp` plugin, and its component plugins--`input-snmp` and `input-snmptrap`--are available in _Technical Preview_ and can be installed on the latest Logstash 7.x and 8.x versions.
+
+Current 1.x versions of the `input-snmp` plugin are bundled with {ls} by default, and will soon be replaced by the snmp input plugin contained in this integration.
+(If you want to opt into the Technical Preview for the `integration-snmp` plugin, run `bin/logstash-plugin install logstash-integration-snmp`.)
+
+Be aware of behavioral and mapping differences between current stand-alone plugins and the new versions included in the `integration-snmp`. 
+
+Before you install the new integration, be aware of link:{logstash-ref}/plugins-integrations-snmp.html#plugins-integrations-snmp-migration[behavioral and mapping differences] between current stand-alone plugins and the new versions included in `integration-snmp`. 
+****
 
 ==== Description
 
@@ -35,10 +48,8 @@ The `logstash-input-snmptrap` plugin is now a component of the `logstash-integra
 This integrated plugin package provides better alignment in snmp processing, better resource management, 
 easier package maintenance, and a smaller installation footprint. 
 
-For migration information and guidelines, check out the migration guide.
+Before you install the new integration, be aware of link:{logstash-ref}/plugins-integrations-snmp.html#plugins-integrations-snmp-migration[behavioral and mapping differences] between current stand-alone plugins and the new versions included in `integration-snmp`. 
 **** 
-
-// TODO: Add link to migration topic in the integration index. 
 
 [id="plugins-{type}s-{plugin}-ecs"]
 ==== Event Metadata and the Elastic Common Schema (ECS)
@@ -78,11 +89,11 @@ which variable binding in the list caused the error
 ==== Importing MIBs
 
 This plugin already includes the IETF MIBs (management information bases), and you do not need to import them.
-If you need additional MIBs, you need to important them.  
+If you need additional MIBs, you need to import them.  
 Check out "Importing MIBs" for instructions.
 
+// link:{logstash-ref}/plugins-input-snmp.html[Importing MIBs]
 // ToDo: Add link to MIBs content after generated file exists.
-
 
 [id="plugins-{type}s-{plugin}-options"]
 ==== SNMP Trap Input Configuration Options
@@ -263,7 +274,7 @@ The supported transport protocols to listen on.
 
 SNMP was originally designed for use with UDP as transport protocol and is the official recommendation.
 TCP is an optional transport mapping and can be enabled if needed. For more details
-on SNMP over TCP, please refer to the https://datatracker.ietf.org/doc/html/rfc3430[RFC-3430].
+on SNMP over TCP, please refer to the link:https://datatracker.ietf.org/doc/html/rfc3430[RFC-3430].
 
 [id="plugins-{type}s-{plugin}-supported_versions"]
 ===== `supported_versions`
@@ -299,7 +310,7 @@ The number of threads to use for processing the received SNMP trap messages.
   * Value type is <<boolean,boolean>>
   * Default value is `true`
 
-This plugin provides all IETF MIBs (management information bases), publicly available in the https://www.ibr.cs.tu-bs.de/projects/libsmi[libsmi] version `0.5.0`.
+This plugin provides all IETF MIBs (management information bases), publicly available in the link:https://www.ibr.cs.tu-bs.de/projects/libsmi[libsmi] version `0.5.0`.
 When enabled, it automatically loads the bundled MIBs and provides mapping of the numeric OIDs to MIB field names in the resulting event.
 
 [id="plugins-{type}s-{plugin}-yamlmibdir"]
