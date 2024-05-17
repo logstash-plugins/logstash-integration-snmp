@@ -90,10 +90,7 @@ which variable binding in the list caused the error
 
 This plugin already includes the IETF MIBs (management information bases), and you do not need to import them.
 If you need additional MIBs, you need to import them.  
-Check out "Importing MIBs" for instructions.
-
-// link:{logstash-ref}/plugins-input-snmp.html[Importing MIBs]
-// ToDo: Add link to MIBs content after generated file exists.
+Check out link:{logstash-ref}/plugins-input-snmp.html[Importing MIBs] for info.
 
 [id="plugins-{type}s-{plugin}-options"]
 ==== SNMP Trap Input Configuration Options
