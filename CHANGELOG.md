@@ -1,5 +1,5 @@
 ## 4.0.1
-- [DOC] Add technical preview banner and reimplement cross-doc links [#57](https://github.com/logstash-plugins/logstash-integration-snmp/pull/57)
+  - [DOC] Add technical preview banner and reimplement cross-doc links [#57](https://github.com/logstash-plugins/logstash-integration-snmp/pull/57)
 
 ## 4.0.0
   - Initial Release of SNMP Integration Plugin, incorporating [logstash-input-snmp](https://github.com/logstash-plugins/logstash-input-snmp) and [logstash-input-snmptrap](https://github.com/logstash-plugins/logstash-input-snmptrap).
