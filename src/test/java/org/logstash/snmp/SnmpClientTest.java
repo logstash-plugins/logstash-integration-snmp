@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.logstash.snmp.mib.MibManager;
 import org.logstash.snmp.trap.SnmpTrapMessage;
 import org.mockito.ArgumentCaptor;
+import org.mockito.stubbing.Answer;
 import org.snmp4j.CommandResponderEvent;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.MessageDispatcher;
@@ -714,6 +715,55 @@ class SnmpClientTest {
             assertEquals("2", mappedEventTwo.get("index"));
             assertEquals("foo", mappedEventTwo.get("two.foo"));
             assertEquals("bar", mappedEventTwo.get("two.bar"));
+        }
+    }
+
+    @Test
+    void tableShouldRemovedIndexFromVariableBindingOids() throws IOException {
+        try (final SnmpClient client = spy(createClient())) {
+            final TableUtils tableUtils = mock(TableUtils.class);
+            when(client.createGetTableUtils()).thenReturn(tableUtils);
+
+            final TableEvent eventOne = mock(TableEvent.class);
+            when(eventOne.getColumns()).thenReturn(VariableBinding.createFromOIDs(
+                    new OID[]{new OID("1.2.1"), new OID("1.3.1")}));
+            when(eventOne.getIndex()).thenReturn(new OID("1"));
+
+            final TableEvent eventTwo = mock(TableEvent.class);
+            when(eventTwo.getColumns()).thenReturn(VariableBinding.createFromOIDs(
+                    new OID[]{new OID("1.2.3.1.3"), new OID("1.1.3.1.3"), new OID("1.3.4.5")}));
+            when(eventTwo.getIndex()).thenReturn(new OID("1.3"));
+
+            doReturn(List.of(eventOne, eventTwo))
+                    .when(tableUtils)
+                    .getTable(any(), any(OID[].class), isNull(), isNull());
+
+            // Return the OID passed as argument
+            when(mibManager.map(any(OID.class)))
+                    .thenAnswer((Answer<String>) invocation -> invocation.getArgument(0).toString());
+
+            final List<Map<String, Object>> ifTable = client
+                    .table(createTarget(client, "tcp:192.2.1.1/161", "3"), "ifTable", new OID[]{new OID("1")})
+                    .get("ifTable");
+
+            assertEquals(2, ifTable.size());
+
+            final Map<String, Object> eventOneIdx = ifTable.stream()
+                    .filter(p -> p.get("index").equals("1"))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertTrue(eventOneIdx.containsKey("1.2"));
+            assertTrue(eventOneIdx.containsKey("1.3"));
+
+            final Map<String, Object> eventTwoIdx = ifTable.stream()
+                    .filter(p -> p.get("index").equals("1.3"))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertTrue(eventTwoIdx.containsKey("1.2.3"));
+            assertTrue(eventTwoIdx.containsKey("1.1.3"));
+            assertTrue(eventTwoIdx.containsKey("1.3.4.5"));
         }
     }
 

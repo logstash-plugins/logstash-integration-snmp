@@ -1,3 +1,6 @@
+## 4.0.2
+  - Fixed `input-snmp` `tables` event mapping to remove the "index" value from the OID field (backward compatibility) [#61](https://github.com/logstash-plugins/logstash-integration-snmp/pull/61)
+
 ## 4.0.1
   - [DOC] Add technical preview banner and reimplement cross-doc links [#57](https://github.com/logstash-plugins/logstash-integration-snmp/pull/57)
 
