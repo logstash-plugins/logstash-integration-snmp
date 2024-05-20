@@ -435,6 +435,10 @@ public class SnmpClient implements Closeable {
         return Collections.singletonMap(tableName, rows);
     }
 
+    // The org.snmp4j.util.TableEvent columns OIDs contains the table's index value appended to
+    // its rightmost sub-identifiers. There's no reason to maintain that value as this plugin
+    // separate each table's event per row/object, and adds the index value to a specific "index"
+    // field, avoiding repetition on the field names and keeping it backward compatible.
     private OID removeVariableOidIndex(OID oid, OID eventIndex) {
         if (oid.rightMostCompare(eventIndex.size(), eventIndex) != 0) {
             return oid;
