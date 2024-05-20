@@ -424,7 +424,7 @@ public class SnmpClient implements Closeable {
                     continue;
                 }
 
-                final String mappedOid = mib.map(binding.getOid());
+                final String mappedOid = mib.map(removeVariableOidIndex(binding.getOid(), event.getIndex()));
                 final Object value = coerceVariable(binding.getVariable());
                 row.put(mappedOid, value);
             }
@@ -433,6 +433,14 @@ public class SnmpClient implements Closeable {
         }
 
         return Collections.singletonMap(tableName, rows);
+    }
+
+    private OID removeVariableOidIndex(OID oid, OID eventIndex) {
+        if (oid.rightMostCompare(eventIndex.size(), eventIndex) != 0) {
+            return oid;
+        }
+
+        return oid.subOID(0, oid.size() - eventIndex.size());
     }
 
     TableUtils createGetTableUtils() {
