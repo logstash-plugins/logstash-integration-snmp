@@ -130,7 +130,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
         expect(table).to be_a(Array)
 
         (0..9).each do |index|
-          expect(table[index]["iso.org.dod.internet.mgmt.mib-2.system.sysORTable.sysOREntry.sysORUpTime.#{index + 1}"]).to be_a Integer
+          expect(table[index]["iso.org.dod.internet.mgmt.mib-2.system.sysORTable.sysOREntry.sysORUpTime"]).to be_a Integer
           expect(table[index]['index']).to be_a(String)
         end
       end
@@ -192,7 +192,7 @@ describe LogStash::Inputs::Snmp, :integration => true do
         expect(table.length).to be(1)
 
         table_oid_data = table[0]
-        expect(table_oid_data['iso.org.dod.internet.mgmt.mib-2.system.sysName.0']).to be_a String
+        expect(table_oid_data['iso.org.dod.internet.mgmt.mib-2.system.sysName']).to be_a String
         expect(table_oid_data['index']).to be_a String
       end
     end
