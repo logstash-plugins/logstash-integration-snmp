@@ -1,3 +1,6 @@
+## 4.0.3
+  - [Doc] Restore links to importing MIBs info [#60](https://github.com/logstash-plugins/logstash-integration-snmp/pull/60)
+
 ## 4.0.2
   - Fixed `input-snmp` `tables` event mapping to remove the "index" value from the OID field (backward compatibility) [#61](https://github.com/logstash-plugins/logstash-integration-snmp/pull/61)
 
