@@ -62,7 +62,7 @@ public class SnmpTestTrapSender {
         send(pdu, target);
     }
 
-    void sendTrapV2c(String address, String community, Map<String, Object> bindings) {
+    public void sendTrapV2c(String address, String community, Map<String, Object> bindings) {
         final PDU pdu = new PDU();
         pdu.setType(PDU.TRAP);
         addVariableBindings(pdu, bindings);
@@ -77,7 +77,7 @@ public class SnmpTestTrapSender {
         send(pdu, target);
     }
 
-    void sendTrapV3(
+    public void sendTrapV3(
             String address,
             String securityName,
             String authProtocol,
