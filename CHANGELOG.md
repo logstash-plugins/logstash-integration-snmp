@@ -1,3 +1,6 @@
+## 4.0.5
+  - Fix typo resulting in "uninitialized constant" exception for invalid column name [#72](https://github.com/logstash-plugins/logstash-integration-snmp/pull/72)
+
 ## 4.0.4
   - [DOC] Update banners and set user expectations for general availability (GA) [#67](https://github.com/logstash-plugins/logstash-integration-snmp/pull/67)
 
