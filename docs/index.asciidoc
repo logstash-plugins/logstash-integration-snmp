@@ -75,7 +75,7 @@ This change should not affect existing pipelines, unless they have custom error 
 ===== Migration notes: `logstash-input-snmptrap`
 
 As a component of the new `logstash-integration-snmp` plugin, the `logstash-input-snmptrap` plugin offers _almost the same 
-capabilities_ as the stand-alone https://github.com/logstash-plugins/logstash-input-snmp[logstash-input-snmp] plugin. 
+capabilities_ as the stand-alone https://github.com/logstash-plugins/logstash-input-snmptrap[logstash-input-snmptrap] plugin. 
 
 You might need to address some behavior changes depending on your use case and how the ingested data is being handled through the pipeline.
 

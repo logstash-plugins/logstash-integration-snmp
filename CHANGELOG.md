@@ -1,3 +1,6 @@
+## 4.0.6
+  - [DOC] Fix typo in snmptrap migration section [#74](https://github.com/logstash-plugins/logstash-integration-snmp/pull/74)
+
 ## 4.0.5
   - Fix typo resulting in "uninitialized constant" exception for invalid column name [#73](https://github.com/logstash-plugins/logstash-integration-snmp/pull/73)
 
