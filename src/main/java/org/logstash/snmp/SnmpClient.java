@@ -30,7 +30,6 @@ import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.SecurityProtocols.SecurityProtocolSet;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
-import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.AssignableFromInteger;
 import org.snmp4j.smi.AssignableFromLong;
@@ -106,7 +105,7 @@ public class SnmpClient implements Closeable {
             int port,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize,
-            List<UsmUser> users,
+            List<AuthorizedUSM.User> users,
             OctetString localEngineId,
             boolean mapOidVariableValues
     ) throws IOException {
@@ -143,7 +142,7 @@ public class SnmpClient implements Closeable {
             String host,
             int port,
             OctetString localEngineId,
-            List<UsmUser> usmUsers,
+            List<AuthorizedUSM.User> usmUsers,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
     ) throws IOException {
@@ -168,7 +167,7 @@ public class SnmpClient implements Closeable {
     private static MessageDispatcher createMessageDispatcher(
             OctetString localEngineId,
             Set<Integer> supportedVersions,
-            List<UsmUser> usmUsers,
+            List<AuthorizedUSM.User> usmUsers,
             int engineBootCount,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
@@ -209,9 +208,8 @@ public class SnmpClient implements Closeable {
         return dispatcher;
     }
 
-    private static USM createUsm(List<UsmUser> usmUsers, OctetString localEngineID, int engineBootCount) {
-        final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
-
+    private static USM createUsm(List<AuthorizedUSM.User> usmUsers, OctetString localEngineID, int engineBootCount) {
+        final AuthorizedUSM usm = new AuthorizedUSM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
         if (usmUsers != null) {
             usmUsers.forEach(usm::addUser);
         }
@@ -288,7 +286,7 @@ public class SnmpClient implements Closeable {
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
             trapEvent.put("enterprise", String.valueOf(pdUv1.getEnterprise()));
-            trapEvent.put("agent_addr",  String.valueOf(pdUv1.getAgentAddress()));
+            trapEvent.put("agent_addr", String.valueOf(pdUv1.getAgentAddress()));
             trapEvent.put("generic_trap", pdUv1.getGenericTrap());
             trapEvent.put("specific_trap", pdUv1.getSpecificTrap());
             trapEvent.put("timestamp", pdUv1.getTimestamp());

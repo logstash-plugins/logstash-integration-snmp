@@ -1,3 +1,6 @@
+## 4.0.4
+  - Changed the `logstash-input-snmptrap` to enforce the minimum USM security level [#TBD](https://github.com/logstash-plugins/logstash-integration-snmp/pull/TBD)
+
 ## 4.0.3
   - [Doc] Restore links to importing MIBs info [#60](https://github.com/logstash-plugins/logstash-integration-snmp/pull/60)
 

@@ -185,6 +185,16 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
           expect(queue.size).to eq(0)
         end
       end
+
+      context 'when receiving a request with invalid security level' do
+        it 'should not process the message' do
+          queue = run_plugin_and_get_queue(plugin, timeout: 3) do
+            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, 'wrong@password', priv_protocol, priv_pass, 'noAuthNoPriv', {'1.1' => 'foo'})
+          end
+
+          expect(queue.size).to eq(0)
+        end
+      end
     end
 
     context 'with supported_versions' do
