@@ -1,8 +1,17 @@
+## 4.0.7
+  - Changed the `logstash-input-snmptrap` to enforce the minimum USM security level [#75](https://github.com/logstash-plugins/logstash-integration-snmp/pull/75)
+
+## 4.0.6
+  - [DOC] Fix typo in snmptrap migration section [#74](https://github.com/logstash-plugins/logstash-integration-snmp/pull/74)
+
+## 4.0.5
+  - Fix typo resulting in "uninitialized constant" exception for invalid column name [#73](https://github.com/logstash-plugins/logstash-integration-snmp/pull/73)
+
 ## 4.0.4
-  - Changed the `logstash-input-snmptrap` to enforce the minimum USM security level [#TBD](https://github.com/logstash-plugins/logstash-integration-snmp/pull/TBD)
+  - [DOC] Update banners and set user expectations for general availability (GA) [#67](https://github.com/logstash-plugins/logstash-integration-snmp/pull/67)
 
 ## 4.0.3
-  - [Doc] Restore links to importing MIBs info [#60](https://github.com/logstash-plugins/logstash-integration-snmp/pull/60)
+  - [DOC] Restore links to importing MIBs info [#60](https://github.com/logstash-plugins/logstash-integration-snmp/pull/60)
 
 ## 4.0.2
   - Fixed `input-snmp` `tables` event mapping to remove the "index" value from the OID field (backward compatibility) [#61](https://github.com/logstash-plugins/logstash-integration-snmp/pull/61)

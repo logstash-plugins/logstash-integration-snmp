@@ -275,7 +275,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         columns = table_entry["columns"]
         columns.each do |column|
           unless column =~ OID_REGEX
-      	    raise(Logstash::ConfigurationError, "The table column oid '#{column}' is an invalid format")
+      	    raise(LogStash::ConfigurationError, "The table column oid '#{column}' is an invalid format")
           end
         end
         $1
