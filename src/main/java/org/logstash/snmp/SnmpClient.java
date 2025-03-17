@@ -19,6 +19,8 @@ import org.snmp4j.UserTarget;
 import org.snmp4j.event.AuthenticationFailureEvent;
 import org.snmp4j.event.AuthenticationFailureListener;
 import org.snmp4j.event.ResponseEvent;
+import org.snmp4j.log.Log4jLogFactory;
+import org.snmp4j.log.LogFactory;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
 import org.snmp4j.mp.MPv3;
@@ -88,6 +90,10 @@ public class SnmpClient implements Closeable {
     private final String host;
     private final int port;
     private final boolean mapOidVariableValues;
+
+    static {
+        LogFactory.setLogFactory(new Log4jLogFactory());
+    }
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
