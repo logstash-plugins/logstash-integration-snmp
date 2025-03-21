@@ -118,7 +118,7 @@ module LogStash
           validate_usm_user! if validate_usm_user
 
           unless @security_name.nil?
-            client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value, @security_level)
+            client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value, @security_level || 'noAuthNoPriv')
           end
 
           client_builder.setMapOidVariableValues(@oid_map_field_values)

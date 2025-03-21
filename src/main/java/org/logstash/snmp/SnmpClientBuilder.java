@@ -26,7 +26,7 @@ public final class SnmpClientBuilder {
     private final Set<String> supportedTransports;
     private Set<Integer> supportedVersions = Set.of(SnmpConstants.version1, SnmpConstants.version2c, SnmpConstants.version3);
     private String host = "0.0.0.0";
-    private final List<AuthorizedUSM.User> usmUsers = new ArrayList<>();
+    private final List<User> usmUsers = new ArrayList<>();
     private int messageDispatcherPoolSize = 1;
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
     private Duration closeTimeoutDuration;
@@ -53,25 +53,8 @@ public final class SnmpClientBuilder {
             String authProtocol,
             String authPassphrase,
             String privProtocol,
-            String privPassphrase
-    ) {
-        return addUsmUser(
-                securityName,
-                authProtocol,
-                authPassphrase,
-                privProtocol,
-                privPassphrase,
-                null
-        );
-    }
-
-    public SnmpClientBuilder addUsmUser(
-            String securityName,
-            String authProtocol,
-            String authPassphrase,
-            String privProtocol,
             String privPassphrase,
-            String minimumSecurityLevel
+            String securityLevel
     ) {
         final UsmUser usmUser = new UsmUser(
                 new OctetString(securityName),
@@ -80,11 +63,7 @@ public final class SnmpClientBuilder {
                 parsePrivProtocol(privProtocol),
                 parseNullableOctetString(privPassphrase)
         );
-        int minimumSecurityLevelValue = 0;
-        if (minimumSecurityLevel != null && !minimumSecurityLevel.isEmpty()) {
-            minimumSecurityLevelValue = parseSecurityLevel(minimumSecurityLevel);
-        }
-        this.usmUsers.add(new AuthorizedUSM.User(usmUser, minimumSecurityLevelValue));
+        this.usmUsers.add(new User(usmUser, parseSecurityLevel(securityLevel)));
         return this;
     }
 
