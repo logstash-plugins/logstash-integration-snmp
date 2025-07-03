@@ -883,32 +883,28 @@ class SnmpClientTest {
 
     @Test
     void trapShouldNotCallConsumerWhenCommunityIsNotAllowed() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo"}, "bar", 0, false, false);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo"}, "bar", 0, false);
     }
 
     @Test
     void trapShouldCallConsumerWhenCommunityIsAllowed() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo_community"}, "foo_community", 0, true, false);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo_community"}, "foo_community", 0, true);
     }
 
     @Test
     void trapShouldCallConsumerWhenCommunityIsEmpty() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[0], "public", 0, true, false);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[0], "public", 0, true);
     }
 
     @Test
     void trapShouldNotCallConsumerWhenUserSecurityLevelIsNotAllowed() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.NOAUTH_NOPRIV, false, false);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.NOAUTH_NOPRIV, false);
     }
 
     @Test
     void trapShouldCallConsumerWhenUserSecurityLevelIsAllowed() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.AUTH_NOPRIV, true, false);
-    }
-
-    @Test
-    void trapShouldNotCallConsumerWhenUserIsUnknown() throws Exception {
-        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, "foo", SecurityLevel.NOAUTH_NOPRIV, false, true);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.AUTH_NOPRIV, true);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.AUTH_PRIV, true);
     }
 
     private void assertTrapConsumerWhenSecurityNameIs(
@@ -916,8 +912,7 @@ class SnmpClientTest {
             String[] allowedCommunities,
             String securityName,
             int securityLevel,
-            boolean callExpected,
-            boolean unknownUser
+            boolean callExpected
     ) throws Exception {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
@@ -959,19 +954,12 @@ class SnmpClientTest {
                             String.format("Received trap message with unknown community: '%s'. Skipping", securityName)
                     );
                 } else {
-                    if (unknownUser) {
-                        loggerExt.getAppender().assertLogWithFormat(
-                                SnmpClient.class,
-                                Level.DEBUG,
-                                "Received trap message from an unknown user: '{}'. Skipping"
-                        );
-                    } else {
-                        loggerExt.getAppender().assertLogWithFormat(
-                                SnmpClient.class,
-                                Level.DEBUG,
-                                "Unsupported security level {} by user {}, expected {}. Skipping"
-                        );
-                    }
+                    loggerExt.getAppender().assertLogWithFormat(
+                            SnmpClient.class,
+                            Level.DEBUG,
+                            "Unsupported security level {} by user {}, minimum security level is {}. Skipping"
+                    );
+
                 }
             }
         }

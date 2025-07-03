@@ -196,13 +196,14 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         end
       end
 
-      context 'when receiving a request from an unknown user' do
-        it 'should not process the message' do
+      context 'when receiving a request with higher security level' do
+        let(:security_level) { 'authNoPriv' }
+        it 'should process the message' do
           queue = run_plugin_and_get_queue(plugin, timeout: 3) do
-            @trap_sender.send_trap_v3(target_address, "foo", auth_protocol, auth_pass, priv_protocol, priv_pass, 'noAuthNoPriv', {'1.1' => 'foo'})
+            @trap_sender.send_trap_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, 'authPriv', {'1.1' => 'foo'})
           end
 
-          expect(queue.size).to eq(0)
+          expect(queue.size).to eq(1)
         end
       end
     end

@@ -151,7 +151,7 @@ public class SnmpClient implements Closeable {
             String host,
             int port,
             OctetString localEngineId,
-            List<User> usmUsers,
+            List<User> users,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
     ) throws IOException {
@@ -159,7 +159,7 @@ public class SnmpClient implements Closeable {
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
                 localEngineId,
                 supportedVersions,
-                usmUsers,
+                users,
                 engineBootCount,
                 messageDispatcherPoolName,
                 messageDispatcherPoolSize
@@ -176,7 +176,7 @@ public class SnmpClient implements Closeable {
     private static MessageDispatcher createMessageDispatcher(
             OctetString localEngineId,
             Set<Integer> supportedVersions,
-            List<User> usmUsers,
+            List<User> users,
             int engineBootCount,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
@@ -194,7 +194,7 @@ public class SnmpClient implements Closeable {
         }
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
-            final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
+            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
 
@@ -217,11 +217,11 @@ public class SnmpClient implements Closeable {
         return dispatcher;
     }
 
-    private static USM createUsm(List<User> usmUsers, OctetString localEngineID, int engineBootCount) {
+    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount) {
         final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
 
-        if (usmUsers != null) {
-            usmUsers.stream().map(User::getUsmUser).forEach(usm::addUser);
+        if (users != null) {
+            users.stream().map(User::getUsmUser).forEach(usm::addUser);
         }
 
         return usm;
@@ -286,14 +286,9 @@ public class SnmpClient implements Closeable {
                 return false;
             }
         } else {
-            final Integer userSecurityLevel = this.usmUsersSecurityLevel.get(OctetString.fromString(securityName));
-            if (userSecurityLevel == null) {
-                logger.debug("Received trap message from an unknown user: '{}'. Skipping", securityName);
-                return false;
-            }
-            if (!Objects.equals(userSecurityLevel, securityLevel)) {
-                logger.debug("Unsupported security level {} by user {}, expected {}. Skipping",
-                        SecurityLevel.get(securityLevel), securityName, SecurityLevel.get(userSecurityLevel));
+            final int userSecurityLevel = this.usmUsersSecurityLevel.get(OctetString.fromString(securityName));
+            if (securityLevel < userSecurityLevel) {
+                logger.debug("Unsupported security level {} by user {}, minimum security level is {}. Skipping", SecurityLevel.get(securityLevel), securityName, SecurityLevel.get(userSecurityLevel));
                 return false;
             }
         }
