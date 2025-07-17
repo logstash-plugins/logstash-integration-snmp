@@ -19,18 +19,20 @@ import org.snmp4j.UserTarget;
 import org.snmp4j.event.AuthenticationFailureEvent;
 import org.snmp4j.event.AuthenticationFailureListener;
 import org.snmp4j.event.ResponseEvent;
+import org.snmp4j.log.Log4jLogFactory;
+import org.snmp4j.log.LogFactory;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
 import org.snmp4j.mp.MPv3;
 import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.security.Priv3DES;
+import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.SecurityProtocols.SecurityProtocolSet;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
-import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.AssignableFromInteger;
 import org.snmp4j.smi.AssignableFromLong;
@@ -89,6 +91,11 @@ public class SnmpClient implements Closeable {
     private final String host;
     private final int port;
     private final boolean mapOidVariableValues;
+    private final Map<OctetString, Integer> usmUsersSecurityLevel = new HashMap<>();
+
+    static {
+        LogFactory.setLogFactory(new Log4jLogFactory());
+    }
 
     public static SnmpClientBuilder builder(MibManager mib, Set<String> protocols) {
         return new SnmpClientBuilder(mib, protocols, 0);
@@ -106,7 +113,7 @@ public class SnmpClient implements Closeable {
             int port,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize,
-            List<UsmUser> users,
+            List<User> users,
             OctetString localEngineId,
             boolean mapOidVariableValues
     ) throws IOException {
@@ -116,6 +123,7 @@ public class SnmpClient implements Closeable {
         this.supportedVersions = supportedVersions;
         this.supportedTransports = supportedTransports;
         this.mapOidVariableValues = mapOidVariableValues;
+        users.forEach(p -> this.usmUsersSecurityLevel.put(p.getSecurityName(), p.getSecurityLevel()));
 
         // global security models/protocols
         SecurityProtocols.getInstance().addPredefinedProtocolSet(SecurityProtocolSet.maxCompatibility);
@@ -143,7 +151,7 @@ public class SnmpClient implements Closeable {
             String host,
             int port,
             OctetString localEngineId,
-            List<UsmUser> usmUsers,
+            List<User> users,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
     ) throws IOException {
@@ -151,7 +159,7 @@ public class SnmpClient implements Closeable {
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
                 localEngineId,
                 supportedVersions,
-                usmUsers,
+                users,
                 engineBootCount,
                 messageDispatcherPoolName,
                 messageDispatcherPoolSize
@@ -168,7 +176,7 @@ public class SnmpClient implements Closeable {
     private static MessageDispatcher createMessageDispatcher(
             OctetString localEngineId,
             Set<Integer> supportedVersions,
-            List<UsmUser> usmUsers,
+            List<User> users,
             int engineBootCount,
             String messageDispatcherPoolName,
             int messageDispatcherPoolSize
@@ -186,7 +194,7 @@ public class SnmpClient implements Closeable {
         }
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
-            final MPv3 mpv3 = new MPv3(createUsm(usmUsers, localEngineId, engineBootCount));
+            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
 
@@ -209,11 +217,11 @@ public class SnmpClient implements Closeable {
         return dispatcher;
     }
 
-    private static USM createUsm(List<UsmUser> usmUsers, OctetString localEngineID, int engineBootCount) {
+    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount) {
         final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
 
-        if (usmUsers != null) {
-            usmUsers.forEach(usm::addUser);
+        if (users != null) {
+            users.stream().map(User::getUsmUser).forEach(usm::addUser);
         }
 
         return usm;
@@ -229,17 +237,13 @@ public class SnmpClient implements Closeable {
 
     void doTrap(String[] communities, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
         final Set<String> allowedCommunities = Set.of(communities);
-
         getSnmp().addCommandResponder(new CommandResponder() {
             @Override
             public <A extends Address> void processPdu(final CommandResponderEvent<A> event) {
                 logger.debug("SNMP Trap received: {}", event);
                 final int version = event.getMessageProcessingModel();
                 final String securityName = new String(event.getSecurityName());
-
-                // Empty communities means "allow all communities" (BC with ruby-snmp)
-                if (version < SnmpConstants.version3 && !allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
-                    logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
+                if (!validateTrapMessage(version, securityName, event.getSecurityLevel(), allowedCommunities)) {
                     return;
                 }
 
@@ -274,6 +278,23 @@ public class SnmpClient implements Closeable {
         }
     }
 
+    private boolean validateTrapMessage(int version, String securityName, int securityLevel, Set<String> allowedCommunities) {
+        if (version < SnmpConstants.version3) {
+            // Empty communities means "allow all communities" (BC with ruby-snmp)
+            if (!allowedCommunities.isEmpty() && !allowedCommunities.contains(securityName)) {
+                logger.debug("Received trap message with unknown community: '{}'. Skipping", securityName);
+                return false;
+            }
+        } else {
+            final int userSecurityLevel = this.usmUsersSecurityLevel.get(OctetString.fromString(securityName));
+            if (securityLevel < userSecurityLevel) {
+                logger.debug("Unsupported security level {} by user {}, minimum security level is {}. Skipping", SecurityLevel.get(securityLevel), securityName, SecurityLevel.get(userSecurityLevel));
+                return false;
+            }
+        }
+        return true;
+    }
+
     private Map<String, Object> createTrapEvent(int version, final String securityName, PDU pdu) {
         final HashMap<String, Object> trapEvent = new HashMap<>();
         trapEvent.put("version", SnmpUtils.parseSnmpVersion(version));
@@ -288,7 +309,7 @@ public class SnmpClient implements Closeable {
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
             trapEvent.put("enterprise", String.valueOf(pdUv1.getEnterprise()));
-            trapEvent.put("agent_addr",  String.valueOf(pdUv1.getAgentAddress()));
+            trapEvent.put("agent_addr", String.valueOf(pdUv1.getAgentAddress()));
             trapEvent.put("generic_trap", pdUv1.getGenericTrap());
             trapEvent.put("specific_trap", pdUv1.getSpecificTrap());
             trapEvent.put("timestamp", pdUv1.getTimestamp());

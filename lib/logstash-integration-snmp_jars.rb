@@ -2,5 +2,6 @@
 
 require 'jar_dependencies'
 require_jar('org.snmp4j', 'snmp4j', '3.8.0')
+require_jar('org.snmp4j', 'snmp4j-log4j', '2.8.11')
 require_jar('org.snakeyaml', 'snakeyaml-engine', '2.7')
-require_jar('org.logstash.integrations', 'logstash-integration-snmp', '4.0.2')
+require_jar('org.logstash.integrations', 'logstash-integration-snmp', '4.0.7')

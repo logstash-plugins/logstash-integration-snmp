@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import static org.logstash.snmp.SnmpUtils.parseAuthProtocol;
 import static org.logstash.snmp.SnmpUtils.parseNullableOctetString;
 import static org.logstash.snmp.SnmpUtils.parsePrivProtocol;
+import static org.logstash.snmp.SnmpUtils.parseSecurityLevel;
 
 public final class SnmpClientBuilder {
     private final MibManager mib;
@@ -25,7 +26,7 @@ public final class SnmpClientBuilder {
     private final Set<String> supportedTransports;
     private Set<Integer> supportedVersions = Set.of(SnmpConstants.version1, SnmpConstants.version2c, SnmpConstants.version3);
     private String host = "0.0.0.0";
-    private final List<UsmUser> usmUsers = new ArrayList<>();
+    private final List<User> usmUsers = new ArrayList<>();
     private int messageDispatcherPoolSize = 1;
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
     private Duration closeTimeoutDuration;
@@ -52,16 +53,17 @@ public final class SnmpClientBuilder {
             String authProtocol,
             String authPassphrase,
             String privProtocol,
-            String privPassphrase
+            String privPassphrase,
+            String securityLevel
     ) {
-        this.usmUsers.add(new UsmUser(
+        final UsmUser usmUser = new UsmUser(
                 new OctetString(securityName),
                 parseAuthProtocol(authProtocol),
                 parseNullableOctetString(authPassphrase),
                 parsePrivProtocol(privProtocol),
                 parseNullableOctetString(privPassphrase)
-        ));
-
+        );
+        this.usmUsers.add(new User(usmUser, parseSecurityLevel(securityLevel)));
         return this;
     }
 

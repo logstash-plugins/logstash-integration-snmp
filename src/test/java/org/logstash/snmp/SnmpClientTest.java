@@ -240,14 +240,16 @@ class SnmpClientTest {
                         "hmac192sha256",
                         "client-one-pass",
                         "3des",
-                        "client-one-pass"
+                        "client-one-pass",
+                        "noAuthNoPriv"
                 ).build();
              final SnmpClient clientTwo = creatEmptyClientBuilder(mibManager, Set.of("tcp"), PORT + 1)
                      .addUsmUser(securityName.toString(),
                              "md5",
                              "client-two-pass",
                              "des",
-                             "client-two-pass"
+                             "client-two-pass",
+                             "noAuthNoPriv"
                      ).build()
         ) {
             final USM usmClientOne = clientOne.getSnmp().getUSM();
@@ -881,20 +883,37 @@ class SnmpClientTest {
 
     @Test
     void trapShouldNotCallConsumerWhenCommunityIsNotAllowed() throws Exception {
-        assertTrapConsumerWhenCommunityIs(new String[]{"foo"}, "bar", false);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo"}, "bar", 0, false);
     }
 
     @Test
     void trapShouldCallConsumerWhenCommunityIsAllowed() throws Exception {
-        assertTrapConsumerWhenCommunityIs(new String[]{"foo_community"}, "foo_community", true);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[]{"foo_community"}, "foo_community", 0, true);
     }
 
     @Test
     void trapShouldCallConsumerWhenCommunityIsEmpty() throws Exception {
-        assertTrapConsumerWhenCommunityIs(new String[0], "public", true);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version1, new String[0], "public", 0, true);
     }
 
-    private void assertTrapConsumerWhenCommunityIs(String[] allowedCommunities, String pduCommunity, boolean callExpected) throws Exception {
+    @Test
+    void trapShouldNotCallConsumerWhenUserSecurityLevelIsNotAllowed() throws Exception {
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.NOAUTH_NOPRIV, false);
+    }
+
+    @Test
+    void trapShouldCallConsumerWhenUserSecurityLevelIsAllowed() throws Exception {
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.AUTH_NOPRIV, true);
+        assertTrapConsumerWhenSecurityNameIs(SnmpConstants.version3, new String[]{"test"}, USER.getSecurityName().toString(), SecurityLevel.AUTH_PRIV, true);
+    }
+
+    private void assertTrapConsumerWhenSecurityNameIs(
+            int version,
+            String[] allowedCommunities,
+            String securityName,
+            int securityLevel,
+            boolean callExpected
+    ) throws Exception {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
             when(client.getSnmp()).thenReturn(snmp);
@@ -906,9 +925,13 @@ class SnmpClientTest {
 
             final CommandResponderEvent<Address> responderEvent = mock();
             when(responderEvent.getSecurityModel())
-                    .thenReturn(1);
+                    .thenReturn(version);
+            when(responderEvent.getMessageProcessingModel())
+                    .thenReturn(version);
             when(responderEvent.getSecurityName())
-                    .thenReturn(pduCommunity.getBytes());
+                    .thenReturn(securityName.getBytes());
+            when(responderEvent.getSecurityLevel())
+                    .thenReturn(securityLevel);
             when(responderEvent.getPDU())
                     .thenReturn(new PDUv1());
 
@@ -924,11 +947,20 @@ class SnmpClientTest {
                         "Received trap message with unknown community: '{}'. Skipping"
                 );
             } else {
-                loggerExt.getAppender().assertLogWithMessage(
-                        SnmpClient.class,
-                        Level.DEBUG,
-                        String.format("Received trap message with unknown community: '%s'. Skipping", pduCommunity)
-                );
+                if (version < SnmpConstants.version3) {
+                    loggerExt.getAppender().assertLogWithMessage(
+                            SnmpClient.class,
+                            Level.DEBUG,
+                            String.format("Received trap message with unknown community: '%s'. Skipping", securityName)
+                    );
+                } else {
+                    loggerExt.getAppender().assertLogWithFormat(
+                            SnmpClient.class,
+                            Level.DEBUG,
+                            "Unsupported security level {} by user {}, minimum security level is {}. Skipping"
+                    );
+
+                }
             }
         }
     }
@@ -946,7 +978,7 @@ class SnmpClientTest {
         when(mibManager.map(any(OID.class)))
                 .thenReturn("iso.foo", "iso.bar", "iso.dummy");
 
-        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(1, pdUv1);
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(1, pdUv1, TRAP_SECURITY_NAME, SecurityLevel.NOAUTH_NOPRIV);
 
         final Map<String, Object> formattedVariableBindings = snmpTrapMessage.getFormattedVariableBindings();
         assertEquals("foo", formattedVariableBindings.get("iso.foo"));
@@ -972,7 +1004,7 @@ class SnmpClientTest {
         when(mibManager.map(any(OID.class)))
                 .thenReturn("iso.foo", "iso.bar");
 
-        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version1, pdUv1);
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version1, pdUv1, TRAP_SECURITY_NAME, SecurityLevel.NOAUTH_NOPRIV);
         assertEquals(SnmpConstants.version1, snmpTrapMessage.getVersion());
         assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
@@ -1017,7 +1049,7 @@ class SnmpClientTest {
         when(mibManager.map(any(OID.class)))
                 .thenReturn("iso.foo", "iso.bar");
 
-        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version2c, pdu);
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version2c, pdu, TRAP_SECURITY_NAME, SecurityLevel.NOAUTH_NOPRIV);
         assertEquals(SnmpConstants.version2c, snmpTrapMessage.getVersion());
         assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
@@ -1060,9 +1092,10 @@ class SnmpClientTest {
         when(mibManager.map(any(OID.class)))
                 .thenReturn("iso.foo", "iso.bar");
 
-        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version3, scopedPDU);
+        final String securityName = USER.getSecurityName().toString();
+        final SnmpTrapMessage snmpTrapMessage = executeTrapAndGetProducedSnmpTrapMessage(SnmpConstants.version3, scopedPDU, securityName, SecurityLevel.AUTH_NOPRIV);
         assertEquals(SnmpConstants.version3, snmpTrapMessage.getVersion());
-        assertEquals(TRAP_SECURITY_NAME, snmpTrapMessage.getSecurityNameString());
+        assertEquals(securityName, snmpTrapMessage.getSecurityNameString());
         assertEquals(TRAP_PEER_ADDRESS.getInetAddress().getHostAddress(), snmpTrapMessage.getPeerIpAddress());
 
         final Map<String, Object> trapEvent = snmpTrapMessage.getTrapEvent();
@@ -1091,7 +1124,12 @@ class SnmpClientTest {
         assertEquals("bar", formattedVariableBindings.get("iso.bar"));
     }
 
-    private SnmpTrapMessage executeTrapAndGetProducedSnmpTrapMessage(int version, PDU pdu) throws IOException {
+    private SnmpTrapMessage executeTrapAndGetProducedSnmpTrapMessage(
+            int version,
+            PDU pdu,
+            String securityName,
+            int securityLevel
+    ) throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final Snmp snmp = spy(client.getSnmp());
 
@@ -1109,10 +1147,13 @@ class SnmpClientTest {
                     .thenReturn(TRAP_PEER_ADDRESS);
 
             when(responderEvent.getSecurityName())
-                    .thenReturn(TRAP_SECURITY_NAME.getBytes());
+                    .thenReturn(securityName.getBytes());
 
             when(responderEvent.getPDU())
                     .thenReturn(pdu);
+
+            when(responderEvent.getSecurityLevel())
+                    .thenReturn(securityLevel);
 
             // Simulates an incoming trap message
             snmp.processPdu(responderEvent);
@@ -1238,10 +1279,11 @@ class SnmpClientTest {
                         "md5",
                         USER.getAuthenticationPassphrase().toString(),
                         "des",
-                        USER.getPrivacyPassphrase().toString());
+                        USER.getPrivacyPassphrase().toString(),
+                        "authNoPriv");
     }
 
-    private SnmpClientBuilder creatEmptyClientBuilder(MibManager mib, Set<String> protocols, int port){
+    private SnmpClientBuilder creatEmptyClientBuilder(MibManager mib, Set<String> protocols, int port) {
         return SnmpClient.builder(mib, protocols, port)
                 .setCloseTimeoutDuration(CLIENT_CLOSE_TIMEOUT);
     }
