@@ -246,7 +246,6 @@ public class SnmpClient implements Closeable {
                 if (!validateTrapMessage(version, securityName, event.getSecurityLevel(), allowedCommunities)) {
                     return;
                 }
-
                 final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
                 final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
                 for (VariableBinding binding : event.getPDU().getVariableBindings()) {
@@ -306,6 +305,10 @@ public class SnmpClient implements Closeable {
             trapEvent.put("error_status", pdu.getErrorStatus());
             trapEvent.put("error_status_text", pdu.getErrorStatusText());
             trapEvent.put("error_index", pdu.getErrorIndex());
+            if (pdu instanceof ScopedPDU) {
+                trapEvent.put("context_engine_id", ((ScopedPDU)pdu).getContextEngineID());
+                trapEvent.put("context_name", ((ScopedPDU)pdu).getContextName());
+            }
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
             trapEvent.put("enterprise", String.valueOf(pdUv1.getEnterprise()));

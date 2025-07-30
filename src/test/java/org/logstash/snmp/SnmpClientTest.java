@@ -1083,10 +1083,12 @@ class SnmpClientTest {
 
     @Test
     void trapShouldProperlyCreateV3TrapMessage() throws IOException {
-        final PDU scopedPDU = new PDU(PDU.TRAP, List.of(
+        final ScopedPDU scopedPDU = new ScopedPDU();
+        scopedPDU.setVariableBindings(List.of(
                 new VariableBinding(new OID("1.1"), new OctetString("foo")),
                 new VariableBinding(new OID("1.2"), new OctetString("bar"))
         ));
+        scopedPDU.setType(ScopedPDU.TRAP);
         scopedPDU.setRequestID(new Integer32(123));
 
         when(mibManager.map(any(OID.class)))
@@ -1105,6 +1107,8 @@ class SnmpClientTest {
         assertEquals(scopedPDU.getErrorStatus(), trapEvent.remove("error_status"));
         assertEquals(scopedPDU.getErrorStatusText(), trapEvent.remove("error_status_text"));
         assertEquals(scopedPDU.getErrorIndex(), trapEvent.remove("error_index"));
+        assertEquals(scopedPDU.getContextEngineID(), trapEvent.remove("context_engine_id"));
+        assertEquals(scopedPDU.getContextName(), trapEvent.remove("context_name"));
 
         @SuppressWarnings("unchecked") final Map<String, Object> variableBindings = (Map<String, Object>) trapEvent.remove("variable_bindings");
         scopedPDU.getVariableBindings().forEach(binding -> assertEquals(
