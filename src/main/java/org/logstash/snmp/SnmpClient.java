@@ -308,7 +308,7 @@ public class SnmpClient implements Closeable {
             if (pdu instanceof ScopedPDU) {
                 final ScopedPDU scopedPDU = (ScopedPDU) pdu;
                 trapEvent.put("context_engine_id", String.valueOf(scopedPDU.getContextEngineID()));
-                trapEvent.put("context_name", scopedPDU.getContextName());
+                trapEvent.put("context_name", String.valueOf(scopedPDU.getContextName()));
             }
         } else if (pdu instanceof PDUv1) {
             final PDUv1 pdUv1 = (PDUv1) pdu;
