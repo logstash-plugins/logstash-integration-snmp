@@ -1,6 +1,3 @@
-# docker ipv6 only support in version 2.x
-version: '2.4'
-
 # run tests:  cd ci/unit; docker-compose up --build --force-recreate
 # manual:  cd ci/unit; docker-compose run logstash bash
 services:
