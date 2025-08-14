@@ -1,5 +1,5 @@
 ## 4.1.0
-  - Add support for SNMPv3 `context engine ID` and `context name` to the `snmptrap` input[xxx]()
+  - Add support for SNMPv3 `context engine ID` and `context name` to the `snmptrap` input [#76](https://github.com/logstash-plugins/logstash-integration-snmp/pull/76)
 
 ## 4.0.7
   - FIX: The `snmptrap` input now correctly enforces the user security level set by `security_level` config, and drops received events that do not match the configured value [#75](https://github.com/logstash-plugins/logstash-integration-snmp/pull/75)
