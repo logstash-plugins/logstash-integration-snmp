@@ -62,7 +62,7 @@ class SnmpUtilsTest {
         assertEquals(SnmpConstants.usmAesCfb128Protocol, SnmpUtils.parsePrivProtocol("aes"));
         assertEquals(SnmpConstants.usmAesCfb128Protocol, SnmpUtils.parsePrivProtocol("aes128"));
         assertEquals(SnmpConstants.oosnmpUsmAesCfb192Protocol, SnmpUtils.parsePrivProtocol("aes192"));
-        assertEquals(SnmpConstants.oosnmpUsmAesCfb256Protocol, SnmpUtils.parsePrivProtocol("aes256"));
+        assertEquals(SnmpConstants.oosnmpUsmAesCfb256ProtocolWith3DESKeyExtension, SnmpUtils.parsePrivProtocol("aes256with3desExt"));
         assertThrows(SnmpClientException.class, () -> SnmpUtils.parsePrivProtocol("foo"));
     }
 
