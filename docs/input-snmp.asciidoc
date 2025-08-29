@@ -418,6 +418,12 @@ The `priv_pass` option specifies the SNMPv3 encryption password.
 
 The `priv_protocol` option specifies the SNMPv3 privacy/encryption protocol.
 
+.Technical Preview
+****
+The `aes256with3desKey` feature that allows using AES256 with 3DES key extension for `priv_protocol` is in Technical Preview.
+Configuration option and implementation details are subject to change in minor releases without being preceded by deprecation warnings.
+****
+
 [id="plugins-{type}s-{plugin}-security_level"]
 ===== `security_level`
 
