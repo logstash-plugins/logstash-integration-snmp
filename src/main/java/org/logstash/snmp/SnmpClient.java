@@ -33,6 +33,7 @@ import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.SecurityProtocols.SecurityProtocolSet;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
+import org.snmp4j.security.nonstandard.PrivAES256With3DESKeyExtension;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.AssignableFromInteger;
 import org.snmp4j.smi.AssignableFromLong;
@@ -128,6 +129,7 @@ public class SnmpClient implements Closeable {
         // global security models/protocols
         SecurityProtocols.getInstance().addPredefinedProtocolSet(SecurityProtocolSet.maxCompatibility);
         SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
+        SecurityProtocols.getInstance().addPrivacyProtocol(new PrivAES256With3DESKeyExtension());
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
             SecurityModels.getInstance().addSecurityModel(new TSM(localEngineId, false));

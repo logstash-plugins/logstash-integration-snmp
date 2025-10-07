@@ -85,7 +85,7 @@ module LogStash
           base.config :auth_pass, :validate => :password
 
           # The SNMPv3 privacy/encryption protocol
-          base.config :priv_protocol, :validate => %w[des 3des aes aes128 aes192 aes256]
+          base.config :priv_protocol, :validate => %w[des 3des aes aes128 aes192 aes256 aes256with3desKey]
 
           # The SNMPv3 encryption password
           base.config :priv_pass, :validate => :password

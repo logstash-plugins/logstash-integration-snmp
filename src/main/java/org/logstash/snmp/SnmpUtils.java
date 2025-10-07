@@ -97,8 +97,10 @@ final class SnmpUtils {
                 return SnmpConstants.oosnmpUsmAesCfb192Protocol;
             case "aes256":
                 return SnmpConstants.oosnmpUsmAesCfb256Protocol;
+            case "aes256with3desKey":
+                return SnmpConstants.oosnmpUsmAesCfb256ProtocolWith3DESKeyExtension;
             default:
-                throw new SnmpClientException(String.format("privacy protocol '%s' is not supported, expected protocols are 'des', '3des', 'aes', 'aes128', 'aes192', and 'aes256'", privProtocol));
+                throw new SnmpClientException(String.format("privacy protocol '%s' is not supported, expected protocols are 'des', '3des', 'aes', 'aes128', 'aes192', 'aes256' and 'aes256with3desKey'", privProtocol));
         }
     }
 
