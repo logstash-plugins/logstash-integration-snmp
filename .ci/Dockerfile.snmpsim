@@ -1,6 +1,7 @@
 FROM ubuntu:20.04
 
 ARG PORT
+ENV PORT=$PORT
 
 # Install Python and pip
 RUN apt-get update && apt-get -y install \
@@ -32,14 +33,19 @@ USER snmpsim
 # Expose the SNMP port
 EXPOSE $PORT $PORT/udp
 
+# Create a startup script to handle variable expansion
+RUN echo '#!/bin/bash\n\
+snmpsim-command-responder \
+    --data-dir=./data \
+    --agent-udpv4-endpoint=0.0.0.0:${PORT} \
+    --v3-user=testuser \
+    --v3-auth-proto=SHA \
+    --v3-auth-key=authp123 \
+    --v3-priv-proto=AES256 \
+    --v3-priv-key=privpass123 \
+    --v3-only \
+    --log-level=debug' > /app/start.sh && \
+    chmod +x /app/start.sh
+
 # Start the SNMP simulator with the specified configuration
-ENTRYPOINT ["snmpsim-command-responder", \
-    "--data-dir=./data", \
-    "--agent-udpv4-endpoint=0.0.0.0:163", \
-    "--v3-user=testuser", \
-    "--v3-auth-proto=SHA", \
-    "--v3-auth-key=authp123", \
-    "--v3-priv-proto=AES256", \
-    "--v3-priv-key=privpass123", \
-    "--v3-only", \
-    "--log-level=debug"]
+ENTRYPOINT ["/app/start.sh"]
