@@ -8,6 +8,7 @@ services:
     depends_on:
       - snmp1
       - snmp2
+      - snmpsim
     networks:
       app_net:
         ipv4_address: 172.16.238.10
@@ -42,6 +43,21 @@ services:
       dockerfile: Dockerfile.snmp
       args:
         - PORT=162
+  snmpsim:
+    hostname: snmpsim
+    container_name: snmpsim
+    ports:
+      - "163:163/tcp"
+      - "163:163/udp"
+    networks:
+      app_net:
+        ipv4_address: 172.16.238.163
+        ipv6_address: 2001:3984:3989::163
+    build:
+      context: .
+      dockerfile: Dockerfile.snmpsim
+      args:
+        - PORT=163
 
 networks:
   app_net:

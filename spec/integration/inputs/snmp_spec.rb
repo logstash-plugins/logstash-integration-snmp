@@ -73,6 +73,27 @@ describe LogStash::Inputs::Snmp, :integration => true do
 
       it_behaves_like 'snmp plugin return single get event'
     end
+
+    describe 'snmp v3 with AES256 & Triple-DES' do
+      let(:config) { {
+        'hosts' => [{ 'host' => "udp:snmpsim/163", 'version' => '3' }],
+        'security_name' => 'testuser',
+        'auth_protocol' => 'sha',
+        'auth_pass' => 'authp123',
+        'priv_protocol' => 'aes256with3desKey',
+        'priv_pass' => 'privpass123',
+        'security_level' => 'authPriv',
+        'get' => [
+          "1.3.6.1.2.1.1.1.0",  # sysDescr
+        ]
+      } }
+
+      it 'fetches system description from snmpsim' do
+        event = run_plugin_and_get_queue(plugin).pop
+        expect(event).to be_a(LogStash::Event)
+        expect(event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('SNMP Simulator for AES256 with 3DES Key Extension Testing')
+      end
+    end
   end
 
   describe '`walk` operation' do
