@@ -1,3 +1,6 @@
+## 4.2.1
+  - Upgrade log4j dependency [#85](https://github.com/logstash-plugins/logstash-integration-snmp/pull/85)
+
 ## 4.2.0
   - Add AES256 with 3DES extension support for `priv_protocol` [#78](https://github.com/logstash-plugins/logstash-integration-snmp/pull/78)
 
