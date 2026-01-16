@@ -22,7 +22,7 @@ String snmp4jVersion = '3.8.0'
 String snmp4jLog4jVersion = '2.8.11'
 String snakeyamlVersion = '2.7'
 String junitVersion = '5.9.2'
-String log4jVersion = '2.17.2'
+String log4jVersion = '2.25.3'
 String jacksonVersion = '2.15.3'
 String mockitoVersion = '5.9.0'
 
