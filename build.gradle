@@ -36,9 +36,6 @@ repositories {
 }
 
 dependencies {
-    constraints {
-        implementation("org.apache.logging.log4j:log4j-core:${log4jVersion}")
-    }
     implementation "org.snmp4j:snmp4j:${snmp4jVersion}"
     implementation "org.snmp4j:snmp4j-log4j:${snmp4jLog4jVersion}"
     implementation "org.snakeyaml:snakeyaml-engine:${snakeyamlVersion}"
@@ -69,6 +66,11 @@ test {
 
 configurations {
     testImplementation.extendsFrom compileOnly
+}
+
+// LS core provides log4j-core, so we need to exclude it from runtimeClasspath
+configurations.runtimeClasspath {
+    exclude group: 'org.apache.logging.log4j', module: 'log4j-core'
 }
 
 task generateGemJarRequiresFile {
