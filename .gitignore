@@ -5,3 +5,4 @@ Gemfile.lock
 vendor
 /build/
 /.gradle
+lib/logstash-integration-snmp_jars.rb
