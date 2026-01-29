@@ -43,12 +43,8 @@ dependencies {
     // provided by Logstash
     compileOnly "org.apache.logging.log4j:log4j-api:${log4jVersion}"
     compileOnly "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
-    compileOnly "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
-    compileOnly "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
 
     testImplementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
-    testImplementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
-    testImplementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
     testImplementation "org.apache.logging.log4j:log4j-core:${log4jVersion}"
     testImplementation "org.mockito:mockito-core:${mockitoVersion}"
     testImplementation "org.junit.jupiter:junit-jupiter-api:${junitVersion}"
