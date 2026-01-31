@@ -1,3 +1,6 @@
+## 4.2.2
+  - Re-packaging the plugin [#86](https://github.com/logstash-plugins/logstash-integration-snmp/pull/86)
+
 ## 4.2.1
   - Upgrade log4j dependency [#85](https://github.com/logstash-plugins/logstash-integration-snmp/pull/85)
 
