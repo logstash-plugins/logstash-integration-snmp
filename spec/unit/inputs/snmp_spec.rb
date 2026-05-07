@@ -262,6 +262,18 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         end
       end
 
+      context 'should not tag event when no errors' do
+        let(:config) { super().merge({ 'get' => ["1.3.6.1.2.1.1.1.0"], 'hosts' => [{ 'host' => "udp:127.0.0.1/161" }] }) }
+
+        it "does not add tags" do
+          plugin.register
+          plugin.run(queue)
+          event = queue.pop
+
+          expect(event.get("tags")).to be_nil
+        end
+      end
+
       context 'with custom host field (legacy metadata)' do
         let(:config) do
           super().merge({
@@ -315,6 +327,32 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
           expect( event.include?('foo') ).to be false
           expect( event.get('[snmp_data]') ).to eql 'foo' => 'bar'
         end
+      end
+    end
+
+    context 'mocked result with errors' do
+      let(:config) do
+        super().merge({
+          'get' => ['1.3.6.1.2.1.1.1.0'],
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }]
+        })
+      end
+
+      before(:each) do
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call({ 'foo' => 'bar', '_snmp_request_errors' => true })
+        end
+      end
+
+      it 'should tag event with default _snmpfailure tag' do
+        plugin.register
+        plugin.poll_clients(queue)
+        event = queue.pop
+
+        expect(event.get("foo")).to eq("bar")
+        expect(event.get("tags")).to include("_snmpfailure")
+        expect(event.get("_snmp_request_errors")).to be_nil
       end
     end
 

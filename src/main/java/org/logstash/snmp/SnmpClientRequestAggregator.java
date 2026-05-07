@@ -7,11 +7,8 @@ import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -85,7 +82,6 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private final SnmpClient client;
         private final ConcurrentLinkedQueue<CompletableFuture<Map<String, ?>>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
-        private final List<String> errors = Collections.synchronizedList(new ArrayList<>());
 
         public Request(SnmpClient client, Executor executor) {
             this.client = client;
@@ -141,13 +137,13 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
                 logger.error(formattedError);
             }
 
-            errors.add(formattedError);
+            result.put("_snmp_request_errors", true);
 
+            // Preserve any partial data collected before the error occurred
             if (throwable instanceof SnmpClientException) {
                 final Map<String, ?> partialResult = ((SnmpClientException) throwable).getPartialResult();
-                // If there is a partial result, return it instead of losing it due to the exception. This allows to have at least some data in case of errors.
                 if (partialResult != null && !partialResult.isEmpty()) {
-                    return partialResult;
+                    result.putAll(partialResult);
                 }
             }
 
@@ -172,13 +168,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
 
         public CompletableFuture<Void> getResultAsync(Consumer<Map<String, Object>> consumer) {
             return toCompletableFuture()
-                    .thenAccept(p -> {
-                        final Map<String, Object> finalResult = new HashMap<>(this.result);
-                        if (!errors.isEmpty()) {
-                            finalResult.put("_errors", new ArrayList<>(errors));
-                        }
-                        consumer.accept(finalResult);
-                    });
+                    .thenAccept(p -> consumer.accept(new HashMap<>(this.result)));
         }
 
         CompletableFuture<Void> toCompletableFuture() {

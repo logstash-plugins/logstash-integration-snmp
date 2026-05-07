@@ -427,12 +427,7 @@ class SnmpClientRequestAggregatorTest {
 
         final Map<String, Object> result = resultRef.get();
         assertNotNull(result);
-
-        @SuppressWarnings("unchecked") final List<String> errors = (List<String>) result.get("_errors");
-        assertNotNull(errors);
-        assertEquals(1, errors.size());
-        assertTrue(errors.get(0).contains("connection refused"));
-        assertTrue(errors.get(0).contains("error invoking `get` operation"));
+        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -463,10 +458,7 @@ class SnmpClientRequestAggregatorTest {
 
         final Map<String, Object> result = resultRef.get();
         assertNotNull(result);
-
-        @SuppressWarnings("unchecked") final List<String> errors = (List<String>) result.get("_errors");
-        assertNotNull(errors);
-        assertEquals(3, errors.size());
+        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -490,7 +482,7 @@ class SnmpClientRequestAggregatorTest {
         assertNotNull(result);
         assertEquals("bar", result.get("iso.foo"));
         assertEquals("qux", result.get("iso.baz"));
-        assertNotNull(result.get("_errors"));
+        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -520,10 +512,7 @@ class SnmpClientRequestAggregatorTest {
         assertEquals(1, rows.size());
         assertEquals("val", rows.get(0).get("iso.col"));
 
-        final List<String> errors = (List<String>) result.get("_errors");
-        assertNotNull(errors);
-        assertEquals(1, errors.size());
-        assertTrue(errors.get(0).contains("table error"));
+        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -545,7 +534,7 @@ class SnmpClientRequestAggregatorTest {
         final Map<String, Object> result = resultRef.get();
         assertNotNull(result);
         assertEquals(1, result.size());
-        assertNotNull(result.get("_errors"));
+        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     SnmpClientRequestAggregator createAggregator() {

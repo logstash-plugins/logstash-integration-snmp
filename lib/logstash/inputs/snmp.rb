@@ -67,6 +67,9 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # Timeout in milliseconds to execute all hosts configured operations (get, walk, table).
   config :poll_hosts_timeout, :validate => :number
 
+  # Append values to the `tags` field when one or more SNMP operations fail
+  config :tag_on_failure, :validate => :array, :default => ['_snmpfailure']
+
   def initialize(params={})
     super(params)
 
@@ -184,12 +187,14 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       definition = req[:definition]
       result_consumer = lambda do |result|
         if result&.any?
+          has_errors = result.delete('_snmp_request_errors')
           event = targeted_event_factory.new_event(result)
           event.set(@host_protocol_field, definition[:host_protocol])
           event.set(@host_address_field, definition[:host_address])
           event.set(@host_port_field, definition[:host_port])
           event.set(@host_community_field, definition[:host_community])
           decorate(event)
+          @tag_on_failure.each { |tag| event.tag(tag) } if has_errors
           queue << event
         else
           logger.debug? && logger.debug('No SNMP data retrieved', host: definition[:host_address])
