@@ -63,6 +63,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -387,7 +388,8 @@ public class SnmpClient implements Closeable {
             if (event.isError()) {
                 throw new SnmpClientException(
                         String.format("error sending snmp walk request to target %s: %s", target.getAddress(), event.getErrorMessage()),
-                        event.getException()
+                        event.getException(),
+                        result
                 );
             }
 
@@ -434,7 +436,8 @@ public class SnmpClient implements Closeable {
             if (event.isError()) {
                 throw new SnmpClientException(
                         String.format("error sending snmp table request to target %s: %s", target.getAddress(), event.getErrorMessage()),
-                        event.getException()
+                        event.getException(),
+                        Collections.singletonMap(tableName, rows)
                 );
             }
 

@@ -567,6 +567,47 @@ class SnmpClientTest {
     }
 
     @Test
+    void walkWithErrorResponseShouldIncludePartialResult() throws IOException {
+        try (final SnmpClient client = spy(createClient())) {
+            final TreeUtils treeUtils = mock(TreeUtils.class);
+
+            when(client.createGetTreeUtils())
+                    .thenReturn(treeUtils);
+
+            final TreeEvent successEvent = mock(TreeEvent.class);
+            final TreeEvent errorEvent = mock(TreeEvent.class);
+
+            when(successEvent.getVariableBindings())
+                    .thenReturn(new VariableBinding[]{
+                            new VariableBinding(new OID("1.1"), new OctetString("foo")),
+                            new VariableBinding(new OID("1.2"), new OctetString("bar"))
+                    });
+
+            when(errorEvent.isError()).thenReturn(true);
+            when(errorEvent.getErrorMessage()).thenReturn("timeout");
+
+            doReturn(List.of(successEvent, errorEvent))
+                    .when(treeUtils)
+                    .getSubtree(any(), any(OID.class));
+
+            when(mibManager.map(any(OID.class)))
+                    .thenReturn("iso.foo", "iso.bar");
+
+            final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.walk(target, new OID("1"))
+            );
+
+            final Map<String, ?> partialResult = exception.getPartialResult();
+            assertNotNull(partialResult);
+            assertEquals(2, partialResult.size());
+            assertEquals("foo", partialResult.get("iso.foo"));
+            assertEquals("bar", partialResult.get("iso.bar"));
+        }
+    }
+
+    @Test
     void walkWithResponseShouldReturnProperlyMappedFields() throws IOException {
         try (final SnmpClient client = spy(createClient())) {
             final TreeUtils treeUtils = mock(TreeUtils.class);
@@ -667,6 +708,52 @@ class SnmpClientTest {
                     "error sending snmp table request to target 192.168.1.1/161: unknown error",
                     exception.getMessage()
             );
+        }
+    }
+
+    @Test
+    void tableWithErrorResponseShouldIncludePartialResult() throws IOException {
+        try (final SnmpClient client = spy(createClient())) {
+            final TableUtils tableUtils = mock(TableUtils.class);
+
+            when(client.createGetTableUtils())
+                    .thenReturn(tableUtils);
+
+            final TableEvent successEvent = mock(TableEvent.class);
+            final TableEvent errorEvent = mock(TableEvent.class);
+
+            when(successEvent.getIndex()).thenReturn(new OID("1"));
+            when(successEvent.getColumns()).thenReturn(new VariableBinding[]{
+                    new VariableBinding(new OID("1.1.1"), new OctetString("foo"))
+            });
+
+            when(errorEvent.isError()).thenReturn(true);
+            when(errorEvent.getErrorMessage()).thenReturn("timeout");
+
+            doReturn(List.of(successEvent, errorEvent))
+                    .when(tableUtils)
+                    .getTable(any(), any(OID[].class), isNull(), isNull());
+
+            when(mibManager.map(any(OID.class)))
+                    .thenReturn("iso.col");
+
+            final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
+            final OID[] oids = {new OID("1.1")};
+
+            final SnmpClientException exception = assertThrows(
+                    SnmpClientException.class,
+                    () -> client.table(target, "fooTable", oids)
+            );
+
+            final Map<String, ?> partialResult = exception.getPartialResult();
+            assertNotNull(partialResult);
+
+            
+            @SuppressWarnings("unchecked") final List<Map<String, Object>> rows = (List<Map<String, Object>>) partialResult.get("fooTable");
+            assertNotNull(rows);
+            assertEquals(1, rows.size());
+            assertEquals("1", rows.get(0).get("index"));
+            assertEquals("foo", rows.get(0).get("iso.col"));
         }
     }
 
