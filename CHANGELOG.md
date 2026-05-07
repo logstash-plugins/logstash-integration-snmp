@@ -1,3 +1,6 @@
+## 4.2.3
+  - Preserve partial data and report errors in a structured `_errors` field instead of silently discarding failed SNMP operations [#87](https://github.com/logstash-plugins/logstash-integration-snmp/pull/87)
+
 ## 4.2.2
   - Re-packaging the plugin [#86](https://github.com/logstash-plugins/logstash-integration-snmp/pull/86)
 
