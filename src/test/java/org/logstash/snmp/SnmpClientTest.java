@@ -748,7 +748,6 @@ class SnmpClientTest {
             final Map<String, ?> partialResult = exception.getPartialResult();
             assertNotNull(partialResult);
 
-            
             @SuppressWarnings("unchecked") final List<Map<String, Object>> rows = (List<Map<String, Object>>) partialResult.get("fooTable");
             assertNotNull(rows);
             assertEquals(1, rows.size());

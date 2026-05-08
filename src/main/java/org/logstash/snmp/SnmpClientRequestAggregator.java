@@ -131,7 +131,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             final String errorMessage = throwable != null ? throwable.getMessage() : null;
             final String formattedError = String.format("error invoking `%s` operation: %s. %s", operation, errorMessage, logProperties);
 
-            if (logger.isDebugEnabled()){
+            if (logger.isDebugEnabled()) {
                 logger.error("error invoking `{}` operation. {}", operation, logProperties, throwable);
             } else {
                 logger.error(formattedError);
