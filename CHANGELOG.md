@@ -1,4 +1,4 @@
-## 4.2.3
+## 4.3.0
   - Preserve partial data from failed SNMP operations and tag events via `tag_on_failure` (default: `["_snmpfailure"]`) instead of silently discarding them [#91](https://github.com/logstash-plugins/logstash-integration-snmp/pull/91)
 
 ## 4.2.2

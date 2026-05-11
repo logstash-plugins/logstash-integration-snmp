@@ -345,7 +345,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         end
       end
 
-      it 'should tag event with default _snmpfailure tag' do
+      it 'should tag event with default failure tag' do
         plugin.register
         plugin.poll_clients(queue)
         event = queue.pop

@@ -323,7 +323,7 @@ input {
   * Value type is <<array,array>>
   * Default value is `["_snmpfailure"]`
 
-Append values to the `tags` field when one or more SNMP operations fail for a host.
+Tags the event when one or more SNMP operations fail for a host.
 This can happen due to timeouts, unreachable hosts, or errors during `get`, `walk`, or `table` operations.
 Detailed error information is logged at ERROR level.
 
