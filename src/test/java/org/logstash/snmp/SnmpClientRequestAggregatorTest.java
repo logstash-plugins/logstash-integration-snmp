@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -103,15 +104,17 @@ class SnmpClientRequestAggregatorTest {
         when(snmpClient.get(COMMUNIT_TARGET, SOME_OIDS))
                 .thenReturn(Map.of("foo", "bar"));
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertFalse(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
         assertEquals(1, result.size());
         assertEquals("bar", result.get("foo"));
     }
@@ -178,15 +181,17 @@ class SnmpClientRequestAggregatorTest {
         when(snmpClient.walk(COMMUNIT_TARGET, oid))
                 .thenReturn(Map.of("walk", "talk"));
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertFalse(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
         assertEquals(1, result.size());
         assertEquals("talk", result.get("walk"));
     }
@@ -258,15 +263,17 @@ class SnmpClientRequestAggregatorTest {
         when(snmpClient.table(COMMUNIT_TARGET, tableName, columns))
                 .thenReturn(Map.of(tableName, List.of(Map.of("1", "book"))));
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.table(COMMUNIT_TARGET, tableName, columns);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertFalse(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
         assertEquals(1, result.size());
 
         @SuppressWarnings("unchecked") final List<Map<String, Object>> rows = (List<Map<String, Object>>) result.get(tableName);
@@ -340,7 +347,7 @@ class SnmpClientRequestAggregatorTest {
                 Map.of("tableTwo", List.of(Map.of("6", "six")))
         );
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.get(COMMUNIT_TARGET, new OID[]{new OID("1")});
@@ -352,8 +359,10 @@ class SnmpClientRequestAggregatorTest {
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertFalse(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
 
         assertEquals("one", result.get("1"));
         assertEquals("two", result.get("2"));
@@ -384,7 +393,7 @@ class SnmpClientRequestAggregatorTest {
                     throw new UnknownHostException();
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
@@ -393,8 +402,10 @@ class SnmpClientRequestAggregatorTest {
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
         assertEquals("foo", result.get("get"));
         assertEquals("bar", result.get("walk"));
 
@@ -418,16 +429,16 @@ class SnmpClientRequestAggregatorTest {
                     throw new RuntimeException("connection refused");
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
-        assertEquals(true, result.get("_snmp_request_errors"));
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
     }
 
     @Test
@@ -447,7 +458,7 @@ class SnmpClientRequestAggregatorTest {
                     throw new RuntimeException("table failed");
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
@@ -456,9 +467,9 @@ class SnmpClientRequestAggregatorTest {
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
-        assertEquals(true, result.get("_snmp_request_errors"));
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
     }
 
     @Test
@@ -471,18 +482,19 @@ class SnmpClientRequestAggregatorTest {
                     throw new SnmpClientException("walk error", null, partialData);
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
         assertEquals("bar", result.get("iso.foo"));
         assertEquals("qux", result.get("iso.baz"));
-        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -497,22 +509,22 @@ class SnmpClientRequestAggregatorTest {
                     throw new SnmpClientException("table error", null, Map.of(tableName, partialRows));
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.table(COMMUNIT_TARGET, tableName, columns);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
 
         final List<Map<String, Object>> rows = (List<Map<String, Object>>) result.get(tableName);
         assertNotNull(rows);
         assertEquals(1, rows.size());
         assertEquals("val", rows.get(0).get("iso.col"));
-
-        assertEquals(true, result.get("_snmp_request_errors"));
     }
 
     @Test
@@ -524,17 +536,18 @@ class SnmpClientRequestAggregatorTest {
                     throw new SnmpClientException("walk error", null, Map.of());
                 });
 
-        final AtomicReference<Map<String, Object>> resultRef = new AtomicReference<>();
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
             final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
 
-        final Map<String, Object> result = resultRef.get();
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(true, result.get("_snmp_request_errors"));
+        final RequestResult requestResult = resultRef.get();
+        assertNotNull(requestResult);
+        assertTrue(requestResult.hasErrors());
+        final Map<String, Object> result = requestResult.getData();
+        assertEquals(0, result.size());
     }
 
     SnmpClientRequestAggregator createAggregator() {

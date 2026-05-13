@@ -185,16 +185,16 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
     in_flight_requests.each do |req|
       definition = req[:definition]
-      result_consumer = lambda do |result|
+      result_consumer = lambda do |request_result|
+        result = request_result.getData()
         if result&.any?
-          has_errors = result.delete('_snmp_request_errors')
           event = targeted_event_factory.new_event(result)
           event.set(@host_protocol_field, definition[:host_protocol])
           event.set(@host_address_field, definition[:host_address])
           event.set(@host_port_field, definition[:host_port])
           event.set(@host_community_field, definition[:host_community])
           decorate(event)
-          @tag_on_failure.each { |tag| event.tag(tag) } if has_errors
+          @tag_on_failure.each { |tag| event.tag(tag) } if request_result.hasErrors()
           queue << event
         else
           logger.debug? && logger.debug('No SNMP data retrieved', host: definition[:host_address])

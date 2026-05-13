@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -82,6 +83,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private final SnmpClient client;
         private final ConcurrentLinkedQueue<CompletableFuture<Map<String, ?>>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
+        private final AtomicBoolean hasErrors = new AtomicBoolean(false);
 
         public Request(SnmpClient client, Executor executor) {
             this.client = client;
@@ -136,7 +138,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
                 logger.error("error invoking `{}` operation: {}, ignoring. {}", operation, errorMessage, logProperties);
             }
 
-            result.put("_snmp_request_errors", true);
+            hasErrors.set(true);
 
             // Preserve any partial data collected before the error occurred
             if (throwable instanceof SnmpClientException) {
@@ -165,9 +167,9 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             return map;
         }
 
-        public CompletableFuture<Void> getResultAsync(Consumer<Map<String, Object>> consumer) {
+        public CompletableFuture<Void> getResultAsync(Consumer<RequestResult> consumer) {
             return toCompletableFuture()
-                    .thenAccept(p -> consumer.accept(new HashMap<>(this.result)));
+                    .thenAccept(p -> consumer.accept(new RequestResult(new HashMap<>(this.result), hasErrors.get())));
         }
 
         CompletableFuture<Void> toCompletableFuture() {

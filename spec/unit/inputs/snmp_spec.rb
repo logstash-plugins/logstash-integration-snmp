@@ -4,6 +4,8 @@ require "logstash/devutils/rspec/spec_helper"
 require 'logstash/plugin_mixins/ecs_compatibility_support/spec_helper'
 require_relative '../../../lib/logstash/inputs/snmp'
 
+java_import 'org.logstash.snmp.RequestResult'
+
 describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   let(:mock_target) { double("org.snmp4j.Target") }
   let(:mock_client) { double("org.logstash.snmp.SnmpClient") }
@@ -234,7 +236,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       before(:each) do
         expect(mock_aggregator_request).to receive(:get)
         expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call({ 'foo' => 'bar' })
+          consumer.call(RequestResult.new({ 'foo' => 'bar' }, false))
         end
       end
 
@@ -341,7 +343,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       before(:each) do
         expect(mock_aggregator_request).to receive(:get)
         expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call({ 'foo' => 'bar', '_snmp_request_errors' => true })
+          consumer.call(RequestResult.new({ 'foo' => 'bar' }, true))
         end
       end
 
@@ -369,7 +371,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       before(:each) do
         expect(mock_aggregator_request).to receive(:get)
         expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call({})
+          consumer.call(RequestResult.new({}, false))
         end
 
         allow(plugin).to receive(:logger).and_return(logger)
