@@ -114,7 +114,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertFalse(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals(1, result.size());
         assertEquals("bar", result.get("foo"));
     }
@@ -191,7 +191,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertFalse(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals(1, result.size());
         assertEquals("talk", result.get("walk"));
     }
@@ -273,7 +273,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertFalse(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals(1, result.size());
 
         @SuppressWarnings("unchecked") final List<Map<String, Object>> rows = (List<Map<String, Object>>) result.get(tableName);
@@ -362,7 +362,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertFalse(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
 
         assertEquals("one", result.get("1"));
         assertEquals("two", result.get("2"));
@@ -405,7 +405,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertTrue(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals("foo", result.get("get"));
         assertEquals("bar", result.get("walk"));
 
@@ -492,7 +492,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertTrue(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals("bar", result.get("iso.foo"));
         assertEquals("qux", result.get("iso.baz"));
     }
@@ -519,7 +519,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertTrue(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
 
         final List<Map<String, Object>> rows = (List<Map<String, Object>>) result.get(tableName);
         assertNotNull(rows);
@@ -546,7 +546,7 @@ class SnmpClientRequestAggregatorTest {
         final RequestResult requestResult = resultRef.get();
         assertNotNull(requestResult);
         assertTrue(requestResult.hasErrors());
-        final Map<String, Object> result = requestResult.getData();
+        final Map<String, Object> result = requestResult.data();
         assertEquals(0, result.size());
     }
 
