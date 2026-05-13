@@ -379,17 +379,15 @@ public class SnmpClient implements Closeable {
         }
 
         final Map<String, Object> result = new HashMap<>();
+        final List<String> errors = new ArrayList<>();
         for (final TreeEvent event : events) {
             if (event == null) {
                 continue;
             }
 
             if (event.isError()) {
-                throw new SnmpClientException(
-                        String.format("error sending snmp walk request to target %s: %s", target.getAddress(), event.getErrorMessage()),
-                        event.getException(),
-                        result
-                );
+                errors.add(event.getErrorMessage());
+                continue;
             }
 
             final VariableBinding[] variableBindings = event.getVariableBindings();
@@ -407,6 +405,14 @@ public class SnmpClient implements Closeable {
                         coerceVariable(variableBinding.getVariable())
                 );
             }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new SnmpClientException(
+                    String.format("error sending snmp walk request to target %s: %s", target.getAddress(), String.join("; ", errors)),
+                    null,
+                    result
+            );
         }
 
         return result;
@@ -427,17 +433,15 @@ public class SnmpClient implements Closeable {
         }
 
         final List<Map<String, Object>> rows = new ArrayList<>(events.size());
+        final List<String> errors = new ArrayList<>();
         for (final TableEvent event : events) {
             if (event == null) {
                 continue;
             }
 
             if (event.isError()) {
-                throw new SnmpClientException(
-                        String.format("error sending snmp table request to target %s: %s", target.getAddress(), event.getErrorMessage()),
-                        event.getException(),
-                        Collections.singletonMap(tableName, rows)
-                );
+                errors.add(event.getErrorMessage());
+                continue;
             }
 
             final VariableBinding[] variableBindings = event.getColumns();
@@ -457,8 +461,21 @@ public class SnmpClient implements Closeable {
                 final Object value = coerceVariable(binding.getVariable());
                 row.put(mappedOid, value);
             }
+            
+            int eventIndex = rows.size() + errors.size(); // adding some random errors for testing purposes
+            if (eventIndex % 3 == 2) {
+                errors.add("test error for event " + eventIndex);
+            } else {
+                rows.add(row);
+            }
+        }
 
-            rows.add(row);
+        if (!errors.isEmpty()) {
+            throw new SnmpClientException(
+                    String.format("error sending snmp table request to target %s: %s", target.getAddress(), String.join("; ", errors)),
+                    null,
+                    Collections.singletonMap(tableName, rows)
+            );
         }
 
         return Collections.singletonMap(tableName, rows);

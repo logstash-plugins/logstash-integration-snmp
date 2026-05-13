@@ -563,6 +563,7 @@ class SnmpClientTest {
                     "error sending snmp walk request to target 192.168.1.1/161: unknown error",
                     exception.getMessage()
             );
+            assertNull(exception.getCause());
         }
     }
 
@@ -574,24 +575,30 @@ class SnmpClientTest {
             when(client.createGetTreeUtils())
                     .thenReturn(treeUtils);
 
-            final TreeEvent successEvent = mock(TreeEvent.class);
+            final TreeEvent successEvent1 = mock(TreeEvent.class);
             final TreeEvent errorEvent = mock(TreeEvent.class);
+            final TreeEvent successEvent2 = mock(TreeEvent.class);
 
-            when(successEvent.getVariableBindings())
+            when(successEvent1.getVariableBindings())
                     .thenReturn(new VariableBinding[]{
                             new VariableBinding(new OID("1.1"), new OctetString("foo")),
                             new VariableBinding(new OID("1.2"), new OctetString("bar"))
                     });
 
+            when(successEvent2.getVariableBindings())
+                    .thenReturn(new VariableBinding[]{
+                            new VariableBinding(new OID("1.3"), new OctetString("baz"))
+                    });
+
             when(errorEvent.isError()).thenReturn(true);
             when(errorEvent.getErrorMessage()).thenReturn("timeout");
 
-            doReturn(List.of(successEvent, errorEvent))
+            doReturn(List.of(successEvent1, errorEvent, successEvent2))
                     .when(treeUtils)
                     .getSubtree(any(), any(OID.class));
 
             when(mibManager.map(any(OID.class)))
-                    .thenReturn("iso.foo", "iso.bar");
+                    .thenReturn("iso.foo", "iso.bar", "iso.baz");
 
             final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
             final SnmpClientException exception = assertThrows(
@@ -599,11 +606,13 @@ class SnmpClientTest {
                     () -> client.walk(target, new OID("1"))
             );
 
+            assertTrue(exception.getMessage().contains("timeout"));
             final Map<String, ?> partialResult = exception.getPartialResult();
             assertNotNull(partialResult);
-            assertEquals(2, partialResult.size());
+            assertEquals(3, partialResult.size());
             assertEquals("foo", partialResult.get("iso.foo"));
             assertEquals("bar", partialResult.get("iso.bar"));
+            assertEquals("baz", partialResult.get("iso.baz"));
         }
     }
 
@@ -719,23 +728,29 @@ class SnmpClientTest {
             when(client.createGetTableUtils())
                     .thenReturn(tableUtils);
 
-            final TableEvent successEvent = mock(TableEvent.class);
+            final TableEvent successEvent1 = mock(TableEvent.class);
             final TableEvent errorEvent = mock(TableEvent.class);
+            final TableEvent successEvent2 = mock(TableEvent.class);
 
-            when(successEvent.getIndex()).thenReturn(new OID("1"));
-            when(successEvent.getColumns()).thenReturn(new VariableBinding[]{
+            when(successEvent1.getIndex()).thenReturn(new OID("1"));
+            when(successEvent1.getColumns()).thenReturn(new VariableBinding[]{
                     new VariableBinding(new OID("1.1.1"), new OctetString("foo"))
+            });
+
+            when(successEvent2.getIndex()).thenReturn(new OID("2"));
+            when(successEvent2.getColumns()).thenReturn(new VariableBinding[]{
+                    new VariableBinding(new OID("1.1.2"), new OctetString("bar"))
             });
 
             when(errorEvent.isError()).thenReturn(true);
             when(errorEvent.getErrorMessage()).thenReturn("timeout");
 
-            doReturn(List.of(successEvent, errorEvent))
+            doReturn(List.of(successEvent1, errorEvent, successEvent2))
                     .when(tableUtils)
                     .getTable(any(), any(OID[].class), isNull(), isNull());
 
             when(mibManager.map(any(OID.class)))
-                    .thenReturn("iso.col");
+                    .thenReturn("iso.col", "iso.col");
 
             final Target<Address> target = createTarget(client, "tcp:192.168.1.1/161", "3");
             final OID[] oids = {new OID("1.1")};
@@ -745,14 +760,17 @@ class SnmpClientTest {
                     () -> client.table(target, "fooTable", oids)
             );
 
+            assertTrue(exception.getMessage().contains("timeout"));
             final Map<String, ?> partialResult = exception.getPartialResult();
             assertNotNull(partialResult);
 
             @SuppressWarnings("unchecked") final List<Map<String, Object>> rows = (List<Map<String, Object>>) partialResult.get("fooTable");
             assertNotNull(rows);
-            assertEquals(1, rows.size());
+            assertEquals(2, rows.size());
             assertEquals("1", rows.get(0).get("index"));
             assertEquals("foo", rows.get(0).get("iso.col"));
+            assertEquals("2", rows.get(1).get("index"));
+            assertEquals("bar", rows.get(1).get("iso.col"));
         }
     }
 
