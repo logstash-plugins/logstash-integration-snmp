@@ -60,6 +60,10 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
   # by the message dispatcher, so it won't block the listener thread.
   config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.seventy_five_percent
 
+  # When enabled, the plugin persists its SNMPv3 local engine boots so INFORM senders can
+  # resynchronize after a usmNotInTimeWindow report.
+  config :snmpv3_inform_resync, :validate => :boolean, :default => false
+
   # These MIBs were automatically added by ruby-snmp when no @yamlmibdir was provided.
   MIB_DEFAULT_PATHS = [
     ::File.join(MIB_BASE_PATH, 'ietf', 'SNMPv2-SMI.dic'),
@@ -132,7 +136,11 @@ class LogStash::Inputs::Snmptrap < LogStash::Inputs::Base
                         .setMessageDispatcherPoolName('SnmpTrapMessageDispatcherWorker')
                         .setMessageDispatcherPoolSize(@threads)
 
-    build_snmp_client!(client_builder, validate_usm_user: @supported_versions.include?('3'))
+    build_snmp_client!(
+      client_builder,
+      validate_usm_user: @supported_versions.include?('3'),
+      persist_engine_boots: @snmpv3_inform_resync
+    )
   end
 
   def consume_trap_message(output_queue, trap_message)

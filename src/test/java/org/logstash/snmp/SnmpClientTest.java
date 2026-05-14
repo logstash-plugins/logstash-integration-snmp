@@ -4,6 +4,7 @@ import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.logstash.snmp.mib.MibManager;
@@ -19,12 +20,14 @@ import org.snmp4j.PDUv1;
 import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.Target;
+import org.snmp4j.TransportStateReference;
 import org.snmp4j.TransportMapping;
 import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv1;
 import org.snmp4j.mp.MPv2c;
 import org.snmp4j.mp.MPv3;
+import org.snmp4j.mp.StatusInformation;
 import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.security.AuthHMAC192SHA256;
 import org.snmp4j.security.AuthMD5;
@@ -36,6 +39,7 @@ import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.TSM;
 import org.snmp4j.security.USM;
+import org.snmp4j.security.UsmTimeEntry;
 import org.snmp4j.security.UsmUser;
 import org.snmp4j.security.UsmUserEntry;
 import org.snmp4j.smi.Address;
@@ -63,6 +67,7 @@ import org.snmp4j.util.TreeEvent;
 import org.snmp4j.util.TreeUtils;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -84,6 +89,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -96,6 +102,15 @@ class SnmpClientTest {
     private static final String HOST_ADDRESS = "localhost/161";
     private static final int PORT = 1069;
     private static final String LOCAL_ENGINE_ID = new String(MPv3.createLocalEngineID());
+    private static final String HEX_LOCAL_ENGINE_ID = "80:00:1f:88:80:50:09:d7:68:be:4f:d5:69:00:00:00:00";
+    private static final byte[] HEX_LOCAL_ENGINE_ID_BYTES = new byte[]{
+            (byte) 0x80, 0x00, 0x1f, (byte) 0x88, (byte) 0x80, 0x50, 0x09, (byte) 0xd7,
+            0x68, (byte) 0xbe, 0x4f, (byte) 0xd5, 0x69, 0x00, 0x00, 0x00, 0x00
+    };
+        private static final OctetString REMOTE_ENGINE_ID = new OctetString(new byte[]{
+            (byte) 0x80, 0x00, 0x1f, (byte) 0x88, (byte) 0x80, 0x50, 0x09, (byte) 0xd7,
+            0x68, (byte) 0xbe, 0x4f, (byte) 0xd5, 0x69, 0x00, 0x00, 0x00, 0x01
+        });
     private static final UsmUser USER = new UsmUser(
             new OctetString("admin"),
             AuthMD5.ID,
@@ -110,6 +125,9 @@ class SnmpClientTest {
 
     @RegisterExtension
     LoggerAppenderExtension loggerExt = new LoggerAppenderExtension(LogManager.getLogger(SnmpClient.class));
+
+    @RegisterExtension
+    LoggerAppenderExtension persistentUsmLoggerExt = new LoggerAppenderExtension(LogManager.getLogger(PersistentUsm.class));
 
     @Test
     void shouldAddByDefaultAllSnmpMessageDispatcherProcessingModels() throws IOException {
@@ -216,6 +234,112 @@ class SnmpClientTest {
             assertNotNull(mpv3);
             assertArrayEquals(LOCAL_ENGINE_ID.getBytes(), mpv3.getLocalEngineID());
         }
+    }
+
+    @Test
+    void shouldParseHexEncodedSnmpMPv3LocalEngineId() throws IOException {
+        final SnmpClientBuilder builder = createClientBuilder(Set.of("udp"))
+                .setLocalEngineId(HEX_LOCAL_ENGINE_ID);
+
+        try (final SnmpClient client = builder.build()) {
+            final MPv3 mpv3 = (MPv3) client.getSnmp().getMessageProcessingModel(MPv3.ID);
+            assertNotNull(mpv3);
+            assertArrayEquals(HEX_LOCAL_ENGINE_ID_BYTES, mpv3.getLocalEngineID());
+        }
+    }
+
+    @Test
+    void shouldPersistLocalEngineBootsAcrossRestarts(@TempDir final Path tempDir) throws IOException {
+        final String persistencePath = tempDir.resolve("snmp.engineboots").toString();
+        byte[] firstLocalEngineId;
+
+        try (final SnmpClient firstClient = createAutoLocalEngineIdClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"))
+                .setEngineBootsPersistencePath(persistencePath)
+                .build()) {
+            assertEquals(0, firstClient.getSnmp().getUSM().getEngineBoots());
+            final MPv3 mpv3 = (MPv3) firstClient.getSnmp().getMessageProcessingModel(MPv3.ID);
+            assertNotNull(mpv3);
+            firstLocalEngineId = mpv3.getLocalEngineID();
+        }
+
+        try (final SnmpClient secondClient = createAutoLocalEngineIdClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"))
+                .setEngineBootsPersistencePath(persistencePath)
+                .build()) {
+            final MPv3 mpv3 = (MPv3) secondClient.getSnmp().getMessageProcessingModel(MPv3.ID);
+            assertNotNull(mpv3);
+            assertArrayEquals(firstLocalEngineId, mpv3.getLocalEngineID());
+            assertEquals(1, secondClient.getSnmp().getUSM().getEngineBoots());
+        }
+    }
+
+    @Test
+    void shouldPersistRemoteEngineTimeEntriesAcrossRestarts(@TempDir final Path tempDir) throws IOException {
+        final String persistencePath = tempDir.resolve("snmp.engineboots").toString();
+        final UsmTimeEntry remoteEngineTime = new UsmTimeEntry(REMOTE_ENGINE_ID, 7, 900);
+        final int expectedTimeDiff = remoteEngineTime.getTimeDiff();
+
+        try (final SnmpClient firstClient = createAutoLocalEngineIdClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"))
+                .setEngineBootsPersistencePath(persistencePath)
+                .build()) {
+            firstClient.getSnmp().getUSM().getTimeTable().addEntry(remoteEngineTime);
+        }
+
+        try (final SnmpClient secondClient = createAutoLocalEngineIdClientBuilder(Set.of("udp"))
+                .setSupportedVersions(Set.of("3"))
+                .setEngineBootsPersistencePath(persistencePath)
+                .build()) {
+            final UsmTimeEntry restoredRemoteEngineTime = secondClient.getSnmp().getUSM().getTimeTable().getEntry(REMOTE_ENGINE_ID);
+
+            assertNotNull(restoredRemoteEngineTime);
+            assertEquals(7, restoredRemoteEngineTime.getEngineBoots());
+            assertEquals(expectedTimeDiff, restoredRemoteEngineTime.getTimeDiff());
+        }
+    }
+
+    @Test
+    void shouldLogLocalAndIncomingAuthoritativeValuesWhenReturningReportForNotInTimeWindow() {
+        final PersistentUsm usm = new PersistentUsm(SecurityProtocols.getInstance(), new OctetString(LOCAL_ENGINE_ID), 3, null);
+        final UsmTimeEntry incomingEngineTimeEntry = new UsmTimeEntry(REMOTE_ENGINE_ID, 7, 900);
+        final StatusInformation statusInformation = new StatusInformation();
+        final VariableBinding errorIndication = new VariableBinding(SnmpConstants.usmStatsNotInTimeWindows, new Integer32(0));
+        final TransportStateReference tmStateReference = new TransportStateReference(
+            null,
+            TRAP_PEER_ADDRESS,
+            null,
+            null,
+            null,
+            false,
+            null
+        );
+
+        usm.getTimeTable().addEntry(incomingEngineTimeEntry);
+        statusInformation.setErrorIndication(errorIndication);
+
+        usm.logAuthoritativeEngineReportIfNeeded(
+            SnmpConstants.SNMPv3_USM_NOT_IN_TIME_WINDOW,
+            REMOTE_ENGINE_ID,
+            tmStateReference,
+            USER.getSecurityName(),
+            statusInformation
+        );
+
+        persistentUsmLoggerExt.getAppender().assertLog(
+            PersistentUsm.class,
+            Level.INFO,
+            event -> {
+                final String message = event.getMessage().getFormattedMessage();
+                return message.contains("receiver returning REPORT after")
+                    && message.contains(new OctetString(LOCAL_ENGINE_ID).toHexString())
+                    && message.contains("engine_boots=3")
+                    && message.contains("incoming_engine_boots=7")
+                    && message.contains("incoming_engine_time=900")
+                    && message.contains(USER.getSecurityName().toString())
+                    && message.contains(SnmpConstants.usmErrorMessage(SnmpConstants.SNMPv3_USM_NOT_IN_TIME_WINDOW));
+            }
+        );
     }
 
     @Test
@@ -874,7 +998,7 @@ class SnmpClientTest {
             when(client.getSnmp()).thenReturn(snmp);
 
             doNothing().when(snmp).listen();
-            doNothing().when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
+            doReturn(true).when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
 
             client.doTrap(new String[0], ignore -> {/*Empty*/}, new CountDownLatch(0));
 
@@ -920,7 +1044,7 @@ class SnmpClientTest {
             final Snmp snmp = spy(client.getSnmp());
             when(client.getSnmp()).thenReturn(snmp);
             doNothing().when(snmp).listen();
-            doNothing().when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
+            doReturn(true).when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
 
             final boolean[] called = new boolean[1];
             // Start traps client with non-blocking latch
@@ -1144,7 +1268,7 @@ class SnmpClientTest {
 
             when(client.getSnmp()).thenReturn(snmp);
             doNothing().when(snmp).listen();
-            doNothing().when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
+            doReturn(true).when(snmp).addNotificationListener(any(TransportMapping.class), any(Address.class), any(CommandResponder.class));
 
             final SnmpTrapMessage[] message = new SnmpTrapMessage[1];
             client.doTrap(new String[0], p -> message[0] = p, new CountDownLatch(0));
@@ -1197,14 +1321,11 @@ class SnmpClientTest {
     }
 
     @Test
-    void createTargetWithUnknownHostShouldThrow() throws IOException {
+    void createTargetWithUnknownHostShouldCreateTarget() throws IOException {
         try (SnmpClient client = createClient()) {
-            final IllegalArgumentException exception = assertThrows(
-                    IllegalArgumentException.class,
-                    () -> client.createTarget("udp:unknown/161", "1", 1, 1, "public", null, null)
-            );
+            final Target<Address> target = client.createTarget("udp:unknown/161", "1", 1, 1, "public", null, null);
 
-            assertEquals("Invalid or unknown host address: `udp:unknown/161`", exception.getMessage());
+            assertEquals(GenericAddress.parse("udp:unknown/161"), target.getAddress());
         }
     }
 
@@ -1290,6 +1411,19 @@ class SnmpClientTest {
                 .setMessageDispatcherPoolName("FooBarWorker")
                 .setMessageDispatcherPoolSize(1)
                 .setLocalEngineId(LOCAL_ENGINE_ID)
+                .addUsmUser(
+                        USER.getSecurityName().toString(),
+                        "md5",
+                        USER.getAuthenticationPassphrase().toString(),
+                        "des",
+                        USER.getPrivacyPassphrase().toString(),
+                        "authNoPriv");
+    }
+
+    private SnmpClientBuilder createAutoLocalEngineIdClientBuilder(Set<String> protocols) {
+        return creatEmptyClientBuilder(mibManager, protocols, PORT)
+                .setMessageDispatcherPoolName("FooBarWorker")
+                .setMessageDispatcherPoolSize(1)
                 .addUsmUser(
                         USER.getSecurityName().toString(),
                         "md5",

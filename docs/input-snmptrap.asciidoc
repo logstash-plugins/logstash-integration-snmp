@@ -94,12 +94,14 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-community>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-local_engine_id>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
 | <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|Yes
 | <<plugins-{type}s-{plugin}-oid_path_length>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-oid_root_skip>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-port>> |<<number,number>>|No
+| <<plugins-{type}s-{plugin}-snmpv3_inform_resync>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-supported_transports>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-supported_versions>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
@@ -261,6 +263,32 @@ ports) may require root to use. hence the default of 1062.
 The SNMPv3 local engine ID. Its length must be greater or equal than 5 and less or equal than 32.
 When prefixed with `0x`, the value is interpreted as hexadecimal bytes, for example `0x80001f88806763084db5aebf6600000000`.
 If not provided, a default ID is generated based on the local IP address and additional four random bytes.
+
+[NOTE]
+====
+When <<plugins-{type}s-{plugin}-snmpv3_inform_resync>> is enabled, the plugin persists its local engine boots value and the learned SNMPv3 timeliness cache under `path.data/plugins/inputs/snmp` so they can survive Logstash restarts.
+If there is only one `snmptrap` input in a pipeline, the filename is a SHA-256 hash derived from the plugin type and the pipeline id.
+If `pipelines.yml` sets `pipeline.id: jsa-snmp-input-filter`, that pipeline id becomes part of the hash, so the same pipeline keeps the same persistence filename across restarts.
+
+When multiple `snmptrap` inputs share a pipeline, the hash also uses the configured plugin `id` when it was explicitly set, together with the listen host and port, so each instance can keep separate state.
+
+This means separate pipelines get separate state files automatically.
+If you run multiple `snmptrap` inputs in the same pipeline and want them isolated from each other, set an explicit `id` on each plugin instance.
+Auto-generated plugin ids are not used for this key so ordinary restarts continue to reuse the same state file.
+====
+
+[id="plugins-{type}s-{plugin}-snmpv3_inform_resync"]
+===== `snmpv3_inform_resync`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+When enabled, the plugin persists its SNMPv3 local engine boots state so INFORM senders can resynchronize after a restart.
+If a sender receives a `usmNotInTimeWindow` REPORT, SNMP4J uses the returned `engineBoots` and `engineTime` values to refresh its local timeliness table and retry the INFORM.
+This setting persists the plugin's local engine boots counter together with remote SNMPv3 engine timeliness data learned during REPORT-based resynchronization.
+On the receiver side, the first stale INFORM after a restart can still be rejected and logged as `usmStatsNotInTimeWindows` while the sender learns the updated timeliness values and retries.
+
+This setting only affects SNMPv3 INFORM interoperability. It does not change how traps are decoded.
 
 [id="plugins-{type}s-{plugin}-supported_transports"]
 ===== `supported_transports`

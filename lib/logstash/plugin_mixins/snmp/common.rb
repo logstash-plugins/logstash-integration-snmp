@@ -6,7 +6,9 @@ module LogStash
       module Common
         HEX_LOCAL_ENGINE_ID_REGEX = /\A0x[0-9A-Fa-f]+\z/.freeze
 
+        require 'digest'
         require 'logstash-integration-snmp_jars'
+        require 'tmpdir'
 
         java_import 'org.logstash.snmp.RubySnmpOidFieldMapper'
         java_import 'org.logstash.snmp.DefaultOidFieldMapper'
@@ -121,13 +123,14 @@ module LogStash
           mib_manager
         end
 
-        def build_snmp_client!(client_builder, validate_usm_user: false)
+        def build_snmp_client!(client_builder, validate_usm_user: false, persist_engine_boots: true)
           validate_usm_user! if validate_usm_user
 
           unless @security_name.nil?
             client_builder.addUsmUser(@security_name, @auth_protocol, @auth_pass&.value, @priv_protocol, @priv_pass&.value, @security_level || 'noAuthNoPriv')
           end
 
+          client_builder.setEngineBootsPersistencePath(engine_boots_state_file_path) if persist_engine_boots
           set_local_engine_id!(client_builder) unless @local_engine_id.nil?
           client_builder.setMapOidVariableValues(@oid_map_field_values)
           client_builder.build
@@ -221,11 +224,125 @@ module LogStash
           unless local_engine_id_field
             raise(
               LogStash::ConfigurationError,
-              "Unable to set `local_engine_id`: SNMP client builder #{client_builder.java_class.name} does not expose the expected `localEngineId` field"
+              'Unable to set `local_engine_id`: SNMP client builder does not expose the `localEngineId` field for the reflective fallback'
             )
           end
+
           local_engine_id_field.setAccessible(true)
           local_engine_id_field.set(client_builder, OctetString.new(local_engine_id_bytes))
+        end
+
+        def engine_boots_state_file_path
+          state_root = logstash_data_path || ::Dir.tmpdir
+          state_key = engine_boots_state_key
+
+          ::File.join(state_root, 'plugins', 'inputs', 'snmp', "#{Digest::SHA256.hexdigest(state_key)}.engineboots")
+        end
+
+        def engine_boots_state_key
+          if single_plugin_instance_in_pipeline?
+            [plugin_state_namespace, pipeline_state_key].compact.join('|')
+          else
+            [
+              plugin_state_namespace,
+              pipeline_state_key,
+              explicit_plugin_id_state_key,
+              @host,
+              @port,
+              normalized_hosts_state_key
+            ].compact.join('|')
+          end
+        end
+
+        def plugin_state_namespace
+          self.class.respond_to?(:config_name) ? self.class.config_name : self.class.name
+        end
+
+        def normalized_hosts_state_key
+          return nil unless instance_variable_defined?(:@hosts) && @hosts
+
+          @hosts
+            .map { |host| host.sort_by { |key, _value| key.to_s }.map { |key, value| "#{key}=#{value}" }.join(',') }
+            .sort
+            .join(';')
+        end
+
+        def pipeline_state_key
+          pipeline = execution_context.pipeline
+          return nil if pipeline.nil?
+
+          return pipeline.pipeline_id if pipeline.respond_to?(:pipeline_id)
+          return pipeline.id if pipeline.respond_to?(:id)
+
+          nil
+        rescue StandardError
+          nil
+        end
+
+        def explicit_plugin_id_state_key
+          return nil unless respond_to?(:original_params)
+          return nil unless original_params.is_a?(Hash)
+
+          plugin_id = original_params['id'] || original_params[:id]
+          return nil if generated_plugin_id?(plugin_id)
+
+          plugin_id
+        rescue StandardError
+          nil
+        end
+
+        def generated_plugin_id?(plugin_id)
+          return false if plugin_id.nil?
+
+          plugin_id.match?(generated_plugin_id_pattern)
+        end
+
+        def generated_plugin_id_pattern
+          /\A#{Regexp.escape(config_name)}_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z/
+        end
+
+        def single_plugin_instance_in_pipeline?
+          pipeline_plugins = pipeline_plugins_for_state_key
+          return false unless pipeline_plugins.respond_to?(:one?)
+
+          pipeline_plugins.one?
+        rescue StandardError
+          false
+        end
+
+        def pipeline_plugins_for_state_key
+          pipeline = execution_context.pipeline
+          return [] if pipeline.nil?
+
+          collection_name = pipeline_plugin_collection_name
+          return [] unless pipeline.respond_to?(collection_name)
+
+          Array(pipeline.public_send(collection_name)).select do |plugin|
+            plugin.respond_to?(:config_name) && plugin.config_name == config_name
+          end
+        rescue StandardError
+          []
+        end
+
+        def pipeline_plugin_collection_name
+          case @plugin_type
+          when 'input'
+            :inputs
+          when 'filter'
+            :filters
+          when 'output'
+            :outputs
+          else
+            :plugins
+          end
+        end
+
+        def logstash_data_path
+          return nil unless defined?(LogStash::SETTINGS)
+
+          LogStash::SETTINGS.get_value('path.data')
+        rescue StandardError
+          nil
         end
 
         def validate_usm_user!

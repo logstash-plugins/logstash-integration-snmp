@@ -30,6 +30,7 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -48,7 +49,11 @@ public class SnmpTestTrapSender {
     private final Snmp snmp;
 
     public SnmpTestTrapSender(int port) {
-        this.snmp = createSnmpSession(port);
+        this(createSnmpSession(port));
+    }
+
+    SnmpTestTrapSender(Snmp snmp) {
+        this.snmp = Objects.requireNonNull(snmp);
     }
 
     public void sendTrapV1(String address, String community, Map<String, Object> bindings) {
@@ -174,8 +179,7 @@ public class SnmpTestTrapSender {
                 return false;
             }
 
-            final PDU responsePdu = response.getResponse();
-            return responsePdu.getErrorStatus() == PDU.noError;
+            return response.getResponse().getErrorStatus() == PDU.noError;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

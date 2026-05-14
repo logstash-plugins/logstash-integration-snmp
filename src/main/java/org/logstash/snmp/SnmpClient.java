@@ -116,6 +116,7 @@ public class SnmpClient implements Closeable {
             int messageDispatcherPoolSize,
             List<User> users,
             OctetString localEngineId,
+                String engineBootsPersistencePath,
             boolean mapOidVariableValues
     ) throws IOException {
         this.mib = mib;
@@ -144,6 +145,7 @@ public class SnmpClient implements Closeable {
                 users,
                 messageDispatcherPoolName,
                 messageDispatcherPoolSize
+                ,engineBootsPersistencePath
         );
     }
 
@@ -155,16 +157,20 @@ public class SnmpClient implements Closeable {
             OctetString localEngineId,
             List<User> users,
             String messageDispatcherPoolName,
-            int messageDispatcherPoolSize
+            int messageDispatcherPoolSize,
+            String engineBootsPersistencePath
     ) throws IOException {
-        final int engineBootCount = 0;
+        final int engineBootCount = supportedVersions.contains(SnmpConstants.version3)
+                ? EngineBootsStore.nextEngineBoots(engineBootsPersistencePath, localEngineId)
+                : 0;
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
                 localEngineId,
                 supportedVersions,
                 users,
                 engineBootCount,
                 messageDispatcherPoolName,
-                messageDispatcherPoolSize
+            messageDispatcherPoolSize,
+            engineBootsPersistencePath
         );
 
         final Snmp snmp = new Snmp(messageDispatcher);
@@ -181,7 +187,8 @@ public class SnmpClient implements Closeable {
             List<User> users,
             int engineBootCount,
             String messageDispatcherPoolName,
-            int messageDispatcherPoolSize
+            int messageDispatcherPoolSize,
+            String engineBootsPersistencePath
     ) {
         final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
         final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
@@ -196,7 +203,7 @@ public class SnmpClient implements Closeable {
         }
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
-            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount));
+            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount, engineBootsPersistencePath));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
 
@@ -219,8 +226,8 @@ public class SnmpClient implements Closeable {
         return dispatcher;
     }
 
-    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount) {
-        final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
+    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount, String engineBootsPersistencePath) {
+        final USM usm = new PersistentUsm(SecurityProtocols.getInstance(), localEngineID, engineBootCount, engineBootsPersistencePath);
 
         if (users != null) {
             users.stream().map(User::getUsmUser).forEach(usm::addUser);
@@ -649,11 +656,19 @@ public class SnmpClient implements Closeable {
 
     private void closeSnmpClient() {
         try {
+            persistUsmState();
             snmp.close();
         } catch (Exception e) {
             logger.error("Error closing SNMP client", e);
         } finally {
             stopCountDownLatch.countDown();
+        }
+    }
+
+    private void persistUsmState() {
+        final USM usm = snmp.getUSM();
+        if (usm instanceof PersistentUsm) {
+            ((PersistentUsm) usm).persistNow();
         }
     }
 

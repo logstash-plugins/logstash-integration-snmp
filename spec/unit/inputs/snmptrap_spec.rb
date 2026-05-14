@@ -38,6 +38,44 @@ describe LogStash::Inputs::Snmptrap, :ecs_compatibility_support do
     end
   end
 
+  describe '#build_client!' do
+    let(:mib_manager) { double('org.logstash.snmp.mib.MibManager') }
+    let(:client_builder) { double('org.logstash.snmp.SnmpClientBuilder') }
+    let(:config) { super().merge('supported_versions' => ['3']) }
+
+    before(:each) do
+      allow(org.logstash.snmp.SnmpClient).to receive(:builder).and_return(client_builder)
+      allow(client_builder).to receive(:setHost).and_return(client_builder)
+      allow(client_builder).to receive(:setSupportedVersions).and_return(client_builder)
+      allow(client_builder).to receive(:setMessageDispatcherPoolName).and_return(client_builder)
+      allow(client_builder).to receive(:setMessageDispatcherPoolSize).and_return(client_builder)
+    end
+
+    it 'does not persist engine boots for inform resynchronization by default' do
+      expect(plugin).to receive(:build_snmp_client!).with(
+        client_builder,
+        validate_usm_user: true,
+        persist_engine_boots: false
+      )
+
+      plugin.send(:build_client!, mib_manager)
+    end
+
+    context 'when `snmpv3_inform_resync` is enabled' do
+      let(:config) { super().merge('snmpv3_inform_resync' => true) }
+
+      it 'persists engine boots for inform resynchronization' do
+        expect(plugin).to receive(:build_snmp_client!).with(
+          client_builder,
+          validate_usm_user: true,
+          persist_engine_boots: true
+        )
+
+        plugin.send(:build_client!, mib_manager)
+      end
+    end
+  end
+
   ecs_compatibility_matrix(:disabled, :v1, :v8) do |ecs_select|
 
     let(:config) { super().merge 'ecs_compatibility' => ecs_select.active_mode }

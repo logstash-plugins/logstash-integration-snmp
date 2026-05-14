@@ -210,6 +210,7 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
           expect(trap_event.get("#{PDU_METADATA}[version]")).to eq('3')
           expect(trap_event.get("#{PDU_METADATA}[type]")).to eq('INFORM')
         end
+
       end
 
       context 'when receiving a message over TCP' do
