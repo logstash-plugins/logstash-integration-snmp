@@ -567,10 +567,12 @@ public class SnmpClient implements Closeable {
 
         final Address targetAddress = GenericAddress.parse(address);
         if (targetAddress == null) {
-            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", address));
+            // For unknown/unresolvable hosts, parse the protocol and create the appropriate address type
+            // Resolution will be deferred until connection time
+            target.setAddress(createAddressForUnknownHost(address));
+        } else {
+            target.setAddress(targetAddress);
         }
-
-        target.setAddress(targetAddress);
         target.setVersion(snmpVersion);
         target.setRetries(retries);
         target.setTimeout(timeout);
@@ -612,6 +614,24 @@ public class SnmpClient implements Closeable {
                 return new TlsAddress(address);
             default:
                 throw new SnmpClientException(String.format("Invalid transport protocol specified '%s', expecting 'udp', 'tcp' or 'tls'", protocol));
+        }
+    }
+
+    private static Address createAddressForUnknownHost(String addressString) {
+        try {
+            // Try to extract protocol from address string (e.g., "udp:unknown/161")
+            if (addressString.startsWith("tcp:")) {
+                return new TcpAddress(addressString.substring(4));
+            } else if (addressString.startsWith("tls:")) {
+                return new TlsAddress(addressString.substring(4));
+            } else if (addressString.startsWith("udp:")) {
+                return new UdpAddress(addressString.substring(4));
+            } else {
+                // Default to UDP if no protocol specified
+                return new UdpAddress(addressString);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", addressString), e);
         }
     }
 
