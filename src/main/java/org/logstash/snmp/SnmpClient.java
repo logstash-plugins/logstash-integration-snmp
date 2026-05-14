@@ -462,12 +462,7 @@ public class SnmpClient implements Closeable {
                 row.put(mappedOid, value);
             }
             
-            int eventIndex = rows.size() + errors.size(); // adding some random errors for testing purposes
-            if (eventIndex % 3 == 2) {
-                errors.add("test error for event " + eventIndex);
-            } else {
-                rows.add(row);
-            }
+            rows.add(row);
         }
 
         if (!errors.isEmpty()) {

@@ -11,7 +11,7 @@ public class RequestResult {
         this.hasErrors = hasErrors;
     }
 
-    public Map<String, Object> data() {
+    public Map<String, Object> getData() {
         return data;
     }
 
