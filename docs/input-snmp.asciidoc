@@ -213,6 +213,7 @@ If polling all configured hosts takes longer than this interval, a warning will 
   * There is no default value for this setting
 
 The SNMPv3 local engine ID. Its length must be greater or equal than 5 and less or equal than 32.
+When prefixed with `0x`, the value is interpreted as hexadecimal bytes, for example `0x80001f88806763084db5aebf6600000000`.
 If not provided, a default ID is generated based on the local IP address and additional four random bytes.
 
 [id="plugins-{type}s-{plugin}-mib_paths"]

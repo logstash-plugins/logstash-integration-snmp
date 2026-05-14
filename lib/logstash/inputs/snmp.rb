@@ -57,10 +57,6 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # The default, `30`, means poll each host every 30 seconds.
   config :interval, :validate => :number, :default => 30
 
-  # The optional SNMPv3 engine's administratively-unique identifier.
-  # Its length must be greater or equal than 5 and less or equal than 32.
-  config :local_engine_id, :validate => :string
-
   # Number of threads to use for concurrently executing the hosts SNMP requests.
   config :threads, :validate => :number, :required => true, :default => ::LogStash::Config::CpuCoreStrategy.maximum
 
@@ -303,25 +299,12 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     end
   end
 
-  def validate_local_engine_id!
-    return if @local_engine_id.nil?
-
-    if @local_engine_id.length < 5
-      raise(LogStash::ConfigurationError, '`local_engine_id` length must be greater or equal than 5')
-    end
-
-    if @local_engine_id.length > 32
-      raise(LogStash::ConfigurationError, '`local_engine_id` length must be lower or equal than 32')
-    end
-  end
-
   def create_request_aggregator
     SnmpClientRequestAggregator.new(@threads, 'SnmpRequestWorker')
   end
 
   def build_client!(mib_manager, supported_transports, hosts_versions)
     client_builder = org.logstash.snmp.SnmpClient.builder(mib_manager, supported_transports)
-    client_builder.setLocalEngineId(@local_engine_id) unless @local_engine_id.nil?
 
     build_snmp_client!(client_builder, validate_usm_user: hosts_versions.include?('3'))
   end

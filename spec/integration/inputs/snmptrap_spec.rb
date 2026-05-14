@@ -121,6 +121,24 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         let(:config) { super().merge('supported_transports' => ['udp']) }
 
         it_behaves_like 'a plugin receiving a v2c or v3 trap message', '2c'
+
+        it 'acknowledges informs' do
+          inform_acknowledged = false
+
+          queue = run_plugin_and_get_queue(plugin) do
+            bindings = { '1.3.6.1.2.1.1.1.0' => 'It is a 2c inform' }
+            inform_acknowledged = @trap_sender.send_inform_v2c(target_address, community, bindings)
+          end
+
+          expect(inform_acknowledged).to be(true)
+          expect(queue.size).to be(1)
+
+          trap_event = queue.pop
+          expect(trap_event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('It is a 2c inform')
+          expect(trap_event.get("#{PDU_METADATA}[version]")).to eq('2c')
+          expect(trap_event.get("#{PDU_METADATA}[type]")).to eq('INFORM')
+          expect(trap_event.get("#{PDU_METADATA}[community]")).to eq(community)
+        end
       end
 
       context 'when receiving a message over TCP' do
@@ -167,6 +185,32 @@ describe LogStash::Inputs::Snmptrap, :integration => true do
         let(:config) { super().merge('supported_transports' => ['udp']) }
 
         it_behaves_like 'a plugin receiving a v2c or v3 trap message', '3'
+
+        context 'with `local_engine_id` set as a hexadecimal string' do
+          let(:config) do
+            super().merge('local_engine_id' => '0x80001f88806763084db5aebf6600000000')
+          end
+
+          it_behaves_like 'a plugin receiving a v2c or v3 trap message', '3'
+        end
+
+        it 'acknowledges informs' do
+          inform_acknowledged = false
+
+          queue = run_plugin_and_get_queue(plugin) do
+            bindings = { '1.3.6.1.2.1.1.1.0' => 'It is a 3 inform' }
+            inform_acknowledged = @trap_sender.send_inform_v3(target_address, security_name, auth_protocol, auth_pass, priv_protocol, priv_pass, security_level, bindings)
+          end
+
+          expect(inform_acknowledged).to be(true)
+          expect(queue.size).to be(1)
+
+          trap_event = queue.pop
+          expect(trap_event.get('iso.org.dod.internet.mgmt.mib-2.system.sysDescr.0')).to eq('It is a 3 inform')
+          expect(trap_event.get("#{PDU_METADATA}[version]")).to eq('3')
+          expect(trap_event.get("#{PDU_METADATA}[type]")).to eq('INFORM')
+        end
+
       end
 
       context 'when receiving a message over TCP' do

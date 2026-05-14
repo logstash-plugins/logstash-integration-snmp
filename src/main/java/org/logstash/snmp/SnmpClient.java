@@ -116,6 +116,7 @@ public class SnmpClient implements Closeable {
             int messageDispatcherPoolSize,
             List<User> users,
             OctetString localEngineId,
+                String engineBootsPersistencePath,
             boolean mapOidVariableValues
     ) throws IOException {
         this.mib = mib;
@@ -144,6 +145,7 @@ public class SnmpClient implements Closeable {
                 users,
                 messageDispatcherPoolName,
                 messageDispatcherPoolSize
+                ,engineBootsPersistencePath
         );
     }
 
@@ -155,16 +157,20 @@ public class SnmpClient implements Closeable {
             OctetString localEngineId,
             List<User> users,
             String messageDispatcherPoolName,
-            int messageDispatcherPoolSize
+            int messageDispatcherPoolSize,
+            String engineBootsPersistencePath
     ) throws IOException {
-        final int engineBootCount = 0;
+        final int engineBootCount = supportedVersions.contains(SnmpConstants.version3)
+                ? EngineBootsStore.nextEngineBoots(engineBootsPersistencePath, localEngineId)
+                : 0;
         final MessageDispatcher messageDispatcher = createMessageDispatcher(
                 localEngineId,
                 supportedVersions,
                 users,
                 engineBootCount,
                 messageDispatcherPoolName,
-                messageDispatcherPoolSize
+            messageDispatcherPoolSize,
+            engineBootsPersistencePath
         );
 
         final Snmp snmp = new Snmp(messageDispatcher);
@@ -181,7 +187,8 @@ public class SnmpClient implements Closeable {
             List<User> users,
             int engineBootCount,
             String messageDispatcherPoolName,
-            int messageDispatcherPoolSize
+            int messageDispatcherPoolSize,
+            String engineBootsPersistencePath
     ) {
         final ThreadPool threadPool = ThreadPool.create(messageDispatcherPoolName, messageDispatcherPoolSize);
         final MessageDispatcherImpl dispatcherImpl = new MessageDispatcherImpl();
@@ -196,7 +203,7 @@ public class SnmpClient implements Closeable {
         }
 
         if (supportedVersions.contains(SnmpConstants.version3)) {
-            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount));
+            final MPv3 mpv3 = new MPv3(createUsm(users, localEngineId, engineBootCount, engineBootsPersistencePath));
             mpv3.setCurrentMsgID(MPv3.randomMsgID(engineBootCount));
             dispatcher.addMessageProcessingModel(mpv3);
 
@@ -219,8 +226,8 @@ public class SnmpClient implements Closeable {
         return dispatcher;
     }
 
-    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount) {
-        final USM usm = new USM(SecurityProtocols.getInstance(), localEngineID, engineBootCount);
+    private static USM createUsm(List<User> users, OctetString localEngineID, int engineBootCount, String engineBootsPersistencePath) {
+        final USM usm = new PersistentUsm(SecurityProtocols.getInstance(), localEngineID, engineBootCount, engineBootsPersistencePath);
 
         if (users != null) {
             users.stream().map(User::getUsmUser).forEach(usm::addUser);
@@ -239,7 +246,7 @@ public class SnmpClient implements Closeable {
 
     void doTrap(String[] communities, Consumer<SnmpTrapMessage> consumer, CountDownLatch stopCountDownLatch) throws IOException {
         final Set<String> allowedCommunities = Set.of(communities);
-        getSnmp().addCommandResponder(new CommandResponder() {
+        final CommandResponder trapResponder = new CommandResponder() {
             @Override
             public <A extends Address> void processPdu(final CommandResponderEvent<A> event) {
                 logger.debug("SNMP Trap received: {}", event);
@@ -263,7 +270,11 @@ public class SnmpClient implements Closeable {
 
                 consumer.accept(trapMessage);
             }
-        });
+        };
+
+        for (TransportMapping<? extends Address> transportMapping : getSnmp().getMessageDispatcher().getTransportMappings()) {
+            getSnmp().addNotificationListener(transportMapping, transportMapping.getListenAddress(), trapResponder);
+        }
 
         getSnmp().listen();
 
@@ -556,10 +567,12 @@ public class SnmpClient implements Closeable {
 
         final Address targetAddress = GenericAddress.parse(address);
         if (targetAddress == null) {
-            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", address));
+            // For unknown/unresolvable hosts, parse the protocol and create the appropriate address type
+            // Resolution will be deferred until connection time
+            target.setAddress(createAddressForUnknownHost(address));
+        } else {
+            target.setAddress(targetAddress);
         }
-
-        target.setAddress(targetAddress);
         target.setVersion(snmpVersion);
         target.setRetries(retries);
         target.setTimeout(timeout);
@@ -604,6 +617,24 @@ public class SnmpClient implements Closeable {
         }
     }
 
+    private static Address createAddressForUnknownHost(String addressString) {
+        try {
+            // Try to extract protocol from address string (e.g., "udp:unknown/161")
+            if (addressString.startsWith("tcp:")) {
+                return new TcpAddress(addressString.substring(4));
+            } else if (addressString.startsWith("tls:")) {
+                return new TlsAddress(addressString.substring(4));
+            } else if (addressString.startsWith("udp:")) {
+                return new UdpAddress(addressString.substring(4));
+            } else {
+                // Default to UDP if no protocol specified
+                return new UdpAddress(addressString);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException(String.format("Invalid or unknown host address: `%s`", addressString), e);
+        }
+    }
+
     private static AbstractTransportMapping<? extends Address> createTransport(Address address) throws IOException {
         if (address instanceof TlsAddress) {
             return new TLSTM((TlsAddress) address);
@@ -645,11 +676,19 @@ public class SnmpClient implements Closeable {
 
     private void closeSnmpClient() {
         try {
+            persistUsmState();
             snmp.close();
         } catch (Exception e) {
             logger.error("Error closing SNMP client", e);
         } finally {
             stopCountDownLatch.countDown();
+        }
+    }
+
+    private void persistUsmState() {
+        final USM usm = snmp.getUSM();
+        if (usm instanceof PersistentUsm) {
+            ((PersistentUsm) usm).persistNow();
         }
     }
 

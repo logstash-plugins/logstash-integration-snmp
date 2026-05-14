@@ -30,6 +30,7 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -48,7 +49,11 @@ public class SnmpTestTrapSender {
     private final Snmp snmp;
 
     public SnmpTestTrapSender(int port) {
-        this.snmp = createSnmpSession(port);
+        this(createSnmpSession(port));
+    }
+
+    SnmpTestTrapSender(Snmp snmp) {
+        this.snmp = Objects.requireNonNull(snmp);
     }
 
     public void sendTrapV1(String address, String community, Map<String, Object> bindings) {
@@ -77,7 +82,47 @@ public class SnmpTestTrapSender {
         send(pdu, target);
     }
 
+    public boolean sendInformV2c(String address, String community, Map<String, Object> bindings) {
+        final PDU pdu = new PDU();
+        pdu.setType(PDU.INFORM);
+        addVariableBindings(pdu, bindings);
+
+        final CommunityTarget<Address> target = new CommunityTarget<>(
+                GenericAddress.parse(address),
+                new OctetString(community)
+        );
+
+        target.setVersion(SnmpConstants.version2c);
+        target.setSecurityModel(SecurityModel.SECURITY_MODEL_SNMPv2c);
+        return send(pdu, target);
+    }
+
     public void sendTrapV3(
+            String address,
+            String securityName,
+            String authProtocol,
+            String authPassphrase,
+            String privProtocol,
+            String privPassphrase,
+            String securityLevel,
+            Map<String, Object> bindings) {
+        sendScopedPduV3(PDU.TRAP, address, securityName, authProtocol, authPassphrase, privProtocol, privPassphrase, securityLevel, bindings);
+    }
+
+    public boolean sendInformV3(
+            String address,
+            String securityName,
+            String authProtocol,
+            String authPassphrase,
+            String privProtocol,
+            String privPassphrase,
+            String securityLevel,
+            Map<String, Object> bindings) {
+        return sendScopedPduV3(PDU.INFORM, address, securityName, authProtocol, authPassphrase, privProtocol, privPassphrase, securityLevel, bindings);
+    }
+
+    private boolean sendScopedPduV3(
+            int pduType,
             String address,
             String securityName,
             String authProtocol,
@@ -99,7 +144,7 @@ public class SnmpTestTrapSender {
             snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
 
             final ScopedPDU pdu = new ScopedPDU();
-            pdu.setType(PDU.TRAP);
+            pdu.setType(pduType);
             addVariableBindings(pdu, bindings);
 
             final Target<Address> target = new UserTarget<>();
@@ -109,7 +154,7 @@ public class SnmpTestTrapSender {
             target.setVersion(SnmpConstants.version3);
             target.setSecurityModel(SecurityModel.SECURITY_MODEL_USM);
 
-            send(pdu, target);
+            return send(pdu, target);
         } finally {
             cleanupSnmpMessageDispatcherMPv3Model();
         }
@@ -123,12 +168,18 @@ public class SnmpTestTrapSender {
         }
     }
 
-    private void send(PDU pdu, Target<Address> target) {
+    private boolean send(PDU pdu, Target<Address> target) {
         try {
             final ResponseEvent<Address> response = snmp.send(pdu, target);
             if (response != null && response.getError() != null) {
                 throw new RuntimeException(response.getError());
             }
+
+            if (response == null || response.getResponse() == null) {
+                return false;
+            }
+
+            return response.getResponse().getErrorStatus() == PDU.noError;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

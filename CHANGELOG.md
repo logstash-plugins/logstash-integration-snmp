@@ -1,3 +1,6 @@
+## 4.2.3
+  - Support SNMPv3 Informs [#89](https://github.com/logstash-plugins/logstash-integration-snmp/pull/89)
+
 ## 4.2.2
   - Re-packaging the plugin [#86](https://github.com/logstash-plugins/logstash-integration-snmp/pull/86)
 

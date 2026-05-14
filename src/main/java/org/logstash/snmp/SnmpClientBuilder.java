@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.logstash.snmp.SnmpUtils.parseAuthProtocol;
@@ -20,6 +21,8 @@ import static org.logstash.snmp.SnmpUtils.parsePrivProtocol;
 import static org.logstash.snmp.SnmpUtils.parseSecurityLevel;
 
 public final class SnmpClientBuilder {
+    private static final Pattern COLON_DELIMITED_HEX_BYTES = Pattern.compile("^(?i:[0-9a-f]{2}(?::[0-9a-f]{2})+)$");
+
     private final MibManager mib;
     private final int port;
     private OctetString localEngineId = new OctetString(MPv3.createLocalEngineID());
@@ -31,6 +34,8 @@ public final class SnmpClientBuilder {
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
     private Duration closeTimeoutDuration;
     private boolean mapOidVariableValues = false;
+    private String engineBootsPersistencePath;
+    private boolean localEngineIdConfigured;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
         this.mib = mib;
@@ -44,7 +49,18 @@ public final class SnmpClientBuilder {
     }
 
     public SnmpClientBuilder setLocalEngineId(final String localEngineId) {
+        if (COLON_DELIMITED_HEX_BYTES.matcher(localEngineId).matches()) {
+            this.localEngineId = OctetString.fromHexString(localEngineId, ':');
+        } else {
+            this.localEngineId = new OctetString(localEngineId);
+        }
+        this.localEngineIdConfigured = true;
+        return this;
+    }
+
+    public SnmpClientBuilder setLocalEngineId(final byte[] localEngineId) {
         this.localEngineId = new OctetString(localEngineId);
+        this.localEngineIdConfigured = true;
         return this;
     }
 
@@ -101,7 +117,16 @@ public final class SnmpClientBuilder {
         return this;
     }
 
+    public SnmpClientBuilder setEngineBootsPersistencePath(final String engineBootsPersistencePath) {
+        this.engineBootsPersistencePath = engineBootsPersistencePath;
+        return this;
+    }
+
     public SnmpClient build() throws IOException {
+        if (!localEngineIdConfigured) {
+            localEngineId = EngineBootsStore.resolveLocalEngineId(engineBootsPersistencePath, localEngineId);
+        }
+
         final SnmpClient client = new SnmpClient(
                 mib,
                 supportedTransports,
@@ -112,6 +137,7 @@ public final class SnmpClientBuilder {
                 messageDispatcherPoolSize,
                 usmUsers,
                 localEngineId,
+                engineBootsPersistencePath,
                 mapOidVariableValues
         );
 

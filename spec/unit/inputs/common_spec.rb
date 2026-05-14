@@ -1,4 +1,5 @@
 require 'logstash/devutils/rspec/spec_helper'
+require 'digest'
 require_relative '../../../lib/logstash/inputs/snmp'
 require_relative '../../../lib/logstash/inputs/snmptrap'
 
@@ -138,6 +139,58 @@ shared_examples 'a common SNMP plugin' do
   context '#build_snmp_client!' do
     let(:client_builder) { double('org.logstash.snmp.SnmpClientBuilder') }
 
+    before(:each) do
+      allow(client_builder).to receive(:setEngineBootsPersistencePath)
+    end
+
+    it 'sets the engine boots persistence path' do
+      allow(plugin).to receive(:engine_boots_state_file_path).and_return('/tmp/snmp.engineboots')
+
+      expect(client_builder).to receive(:setEngineBootsPersistencePath).with('/tmp/snmp.engineboots')
+      expect(client_builder).to receive(:setMapOidVariableValues)
+      expect(client_builder).to receive(:build)
+
+      plugin.build_snmp_client!(client_builder)
+    end
+
+    context 'with `local_engine_id` set' do
+      let(:config) { super().merge('local_engine_id' => '0123456789') }
+
+      it 'sets the client local engine id' do
+        expect(client_builder).to receive(:setLocalEngineId).with('0123456789')
+        expect(client_builder).to receive(:setMapOidVariableValues)
+        expect(client_builder).to receive(:build)
+
+        plugin.build_snmp_client!(client_builder)
+      end
+    end
+
+    context 'with `local_engine_id` set as a hexadecimal string' do
+      let(:config) { super().merge('local_engine_id' => '0x80001f88806763084db5aebf6600000000') }
+
+      it 'sets the client local engine id using decoded bytes' do
+        expected_engine_id = ['80001f88806763084db5aebf6600000000'].pack('H*').to_java_bytes
+
+        expect(client_builder).to receive(:setLocalEngineId).with(expected_engine_id)
+        expect(client_builder).to receive(:setMapOidVariableValues)
+        expect(client_builder).to receive(:build)
+
+        plugin.build_snmp_client!(client_builder)
+      end
+
+      it 'raises a clear configuration error when the reflective fallback cannot find the engine id field' do
+        java_class = double('java_class', :declared_fields => [])
+        reflective_builder = double('reflective_builder', :java_class => java_class)
+
+        expect do
+          plugin.send(:set_local_engine_id_bytes_with_reflection!, reflective_builder, ['80001f88806763084db5aebf6600000000'].pack('H*').to_java_bytes)
+        end.to raise_error(
+          LogStash::ConfigurationError,
+          'Unable to set `local_engine_id`: SNMP client builder does not expose the `localEngineId` field for the reflective fallback'
+        )
+      end
+    end
+
     context 'with USM user validation' do
       let(:config) { super().merge('security_name' => 'public') }
 
@@ -231,6 +284,141 @@ shared_examples 'a common SNMP plugin' do
             end
           end
         end
+      end
+    end
+  end
+
+  describe '#engine_boots_state_file_path' do
+    before(:each) do
+      allow(plugin).to receive(:logstash_data_path).and_return('/tmp/logstash-data')
+    end
+
+    it 'extracts the pipeline id when available' do
+      allow(plugin).to receive(:execution_context).and_return(double('context', :pipeline => double('pipeline', :pipeline_id => 'main')))
+
+      expect(plugin.send(:pipeline_state_key)).to eq('main')
+    end
+
+    it 'uses the helper state keys when building the path' do
+      allow(plugin).to receive(:pipeline_state_key).and_return('main')
+      allow(plugin).to receive(:explicit_plugin_id_state_key).and_return('trap-a')
+      allow(plugin).to receive(:single_plugin_instance_in_pipeline?).and_return(false)
+      allow(Digest::SHA256).to receive(:hexdigest).and_return('state-key-digest')
+
+      expected_state_key = [
+        plugin.class.config_name,
+        'main',
+        'trap-a',
+        plugin.instance_variable_get(:@host),
+        plugin.instance_variable_get(:@port),
+        plugin.send(:normalized_hosts_state_key)
+      ].compact.join('|')
+
+      expect(plugin.send(:engine_boots_state_file_path)).to eq('/tmp/logstash-data/plugins/inputs/snmp/state-key-digest.engineboots')
+      expect(Digest::SHA256).to have_received(:hexdigest).with(expected_state_key)
+    end
+
+    it 'uses only the plugin type and pipeline id when there is a single plugin instance in the pipeline' do
+      allow(plugin).to receive(:pipeline_state_key).and_return('jsa-snmp-input-filter')
+      allow(plugin).to receive(:single_plugin_instance_in_pipeline?).and_return(true)
+      allow(Digest::SHA256).to receive(:hexdigest).and_return('state-key-digest')
+
+      expect(plugin.send(:engine_boots_state_file_path)).to eq('/tmp/logstash-data/plugins/inputs/snmp/state-key-digest.engineboots')
+      expect(Digest::SHA256).to have_received(:hexdigest).with("#{plugin.class.config_name}|jsa-snmp-input-filter")
+    end
+
+    it 'includes the explicit plugin id when configured' do
+      plugin_with_id = described_class.new(config.merge('id' => 'trap-a'))
+      expect(plugin_with_id.send(:explicit_plugin_id_state_key)).to eq('trap-a')
+    end
+
+    it 'does not include an auto-generated plugin id when it was not configured' do
+      expect(plugin.send(:explicit_plugin_id_state_key)).to be_nil
+    end
+
+    it 'detects a single plugin instance from the pipeline execution context' do
+      pipeline = double('pipeline', :inputs => [plugin])
+      allow(plugin).to receive(:execution_context).and_return(double('context', :pipeline => pipeline))
+
+      expect(plugin.send(:single_plugin_instance_in_pipeline?)).to be(true)
+    end
+  end
+
+  describe 'local_engine_id validation' do
+    let(:local_engine_id) { nil }
+    let(:config) { super().merge('local_engine_id' => local_engine_id) }
+
+    before(:each) do
+      allow(plugin).to receive(:build_client!).and_return(mock_client)
+    end
+
+    context 'with length lower than 5' do
+      let(:local_engine_id) { '1234' }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be greater or equal than 5'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with valid length' do
+      let(:local_engine_id) { '0' * 32 }
+
+      it 'should not raise' do
+        expect { plugin.register }.to_not raise_error
+      end
+    end
+
+    context 'with valid hexadecimal length' do
+      let(:local_engine_id) { '0x80001f88806763084db5aebf6600000000' }
+
+      it 'should not raise' do
+        expect { plugin.register }.to_not raise_error
+      end
+    end
+
+    context 'with invalid hexadecimal content' do
+      let(:local_engine_id) { '0x80001f88806763084db5aebf66000000ZZ' }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` must be a valid hexadecimal string when using the `0x` prefix'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with an odd number of hexadecimal digits' do
+      let(:local_engine_id) { '0x12345' }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` must contain an even number of hexadecimal digits when using the `0x` prefix'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with hexadecimal content shorter than 5 bytes' do
+      let(:local_engine_id) { '0x01020304' }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be greater or equal than 5'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with length greater than 32' do
+      let(:local_engine_id) { '0' * 33 }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be lower or equal than 32'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
+      end
+    end
+
+    context 'with hexadecimal content greater than 32 bytes' do
+      let(:local_engine_id) { '0x' + ('ab' * 33) }
+
+      it 'should raise' do
+        error_message = '`local_engine_id` length must be lower or equal than 32'
+        expect { plugin.register }.to raise_error(LogStash::ConfigurationError, error_message)
       end
     end
   end
