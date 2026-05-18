@@ -130,11 +130,11 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private Map<String, ?> handleRequestException(String operation, Throwable ex, Supplier<Map<String, String>> logPropertiesSupplier) {
             final Throwable throwable = getWrappedException(ex);
             final Map<String, String> logProperties = logPropertiesSupplier.get();
-            final String errorMessage = throwable != null ? throwable.getMessage() : null;
 
             if (logger.isDebugEnabled()) {
                 logger.error("error invoking `{}` operation. {}", operation, logProperties, throwable);
             } else {
+                final String errorMessage = throwable != null ? throwable.getMessage() : null;
                 logger.error("error invoking `{}` operation: {}, ignoring. {}", operation, errorMessage, logProperties);
             }
 
