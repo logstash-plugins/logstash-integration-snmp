@@ -358,6 +358,49 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
+    context 'include_partial_data option' do
+      let(:config) do
+        super().merge({
+          'get' => ['1.3.6.1.2.1.1.1.0'],
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }],
+          'include_partial_data' => include_partial_data_value
+        })
+      end
+
+      before(:each) do
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call(RequestResult.new({ 'partial' => 'data' }, true))
+        end
+      end
+
+      context 'when set to false (default)' do
+        let(:include_partial_data_value) { false }
+
+        it 'tags event and preserves data from successful operations' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event.get("partial")).to eq("data")
+          expect(event.get("tags")).to include("_snmpfailure")
+        end
+      end
+
+      context 'when set to true' do
+        let(:include_partial_data_value) { true }
+
+        it 'tags event and preserves data including partial results' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event.get("partial")).to eq("data")
+          expect(event.get("tags")).to include("_snmpfailure")
+        end
+      end
+    end
+
     context 'mocked empty request result' do
       let(:config) do
         super().merge({

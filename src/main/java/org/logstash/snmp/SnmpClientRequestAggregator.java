@@ -34,8 +34,8 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         this.executor = Executors.newFixedThreadPool(threadPoolSize, new NamedThreadFactory(threadPoolName));
     }
 
-    public Request createRequest(SnmpClient client) {
-        return new Request(client, executor);
+    public Request createRequest(SnmpClient client, boolean includePartialData) {
+        return new Request(client, executor, includePartialData);
     }
 
     public void await(Request[] requests, int timeoutMillis) throws ExecutionException, TimeoutException {
@@ -81,13 +81,15 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
     public static class Request {
         private final Executor executor;
         private final SnmpClient client;
+        private final boolean includePartialData;
         private final ConcurrentLinkedQueue<CompletableFuture<Map<String, ?>>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
         private final AtomicBoolean hasErrors = new AtomicBoolean(false);
 
-        public Request(SnmpClient client, Executor executor) {
+        public Request(SnmpClient client, Executor executor, boolean includePartialData) {
             this.client = client;
             this.executor = executor;
+            this.includePartialData = includePartialData;
         }
 
         public void get(Target<Address> target, OID[] oids) {
@@ -141,7 +143,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             hasErrors.set(true);
 
             // Preserve any partial data collected before the error occurred
-            if (throwable instanceof SnmpClientException) {
+            if (includePartialData && throwable instanceof SnmpClientException) {
                 final Map<String, ?> partialResult = ((SnmpClientException) throwable).getPartialResult();
                 if (partialResult != null && !partialResult.isEmpty()) {
                     result.putAll(partialResult);

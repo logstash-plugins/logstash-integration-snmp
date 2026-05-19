@@ -70,6 +70,10 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # Append values to the `tags` field when one or more SNMP operations fail
   config :tag_on_failure, :validate => :array, :default => ['_snmpfailure']
 
+  # When enabled, preserves partial data from failed walk/table operations in the event.
+  # When disabled, only data from fully successful operations is included.
+  config :include_partial_data, :validate => :boolean, :default => false
+
   def initialize(params={})
     super(params)
 
@@ -164,7 +168,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         definition[:security_level]
       )
 
-      request = @request_aggregator.create_request(@client)
+      request = @request_aggregator.create_request(@client, @include_partial_data)
       in_flight_requests << { request: request, definition: definition }
 
       if definition[:get].any?

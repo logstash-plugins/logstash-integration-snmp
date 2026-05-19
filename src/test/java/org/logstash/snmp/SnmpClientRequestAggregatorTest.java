@@ -64,7 +64,7 @@ class SnmpClientRequestAggregatorTest {
             final int minimumWaitingMillis = 1000;
             final SnmpClientRequestAggregator.Request slowRequest = mock(SnmpClientRequestAggregator.Request.class);
             final CompletableFuture<Void> slowRequestFuture = new CompletableFuture<>();
-            final SnmpClientRequestAggregator.Request fastRequest = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request fastRequest = aggregator.createRequest(snmpClient, false);
 
             when(slowRequest.toCompletableFuture())
                     .thenReturn(slowRequestFuture);
@@ -93,7 +93,7 @@ class SnmpClientRequestAggregatorTest {
     @Test
     void requestWithGetOperationShouldInvokeClientGet() throws Exception {
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).get(COMMUNIT_TARGET, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).get(COMMUNIT_TARGET, SOME_OIDS);
         }
 
         verify(snmpClient).get(COMMUNIT_TARGET, SOME_OIDS);
@@ -106,7 +106,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -129,7 +129,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).get(COMMUNIT_TARGET, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).get(COMMUNIT_TARGET, SOME_OIDS);
         }
 
         loggerExt.getAppender().assertLogWithMessage(
@@ -151,7 +151,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).get(COMMUNIT_TARGET, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).get(COMMUNIT_TARGET, SOME_OIDS);
         }
 
         final String expectedLogMessage = String.format("error invoking `get` operation. %s", expectedLogDetails);
@@ -168,7 +168,7 @@ class SnmpClientRequestAggregatorTest {
         final OID oid = new OID("1");
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).walk(COMMUNIT_TARGET, oid);
+            aggregator.createRequest(snmpClient, false).walk(COMMUNIT_TARGET, oid);
         }
 
         verify(snmpClient).walk(COMMUNIT_TARGET, oid);
@@ -183,7 +183,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false  );
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -208,7 +208,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).walk(COMMUNIT_TARGET, oid);
+            aggregator.createRequest(snmpClient, false).walk(COMMUNIT_TARGET, oid);
         }
 
         loggerExt.getAppender().assertLogWithMessage(
@@ -231,7 +231,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).walk(COMMUNIT_TARGET, oid);
+            aggregator.createRequest(snmpClient, false).walk(COMMUNIT_TARGET, oid);
         }
 
         final String expectedLogMessage = String.format("error invoking `walk` operation. %s", expectedLogDetails);
@@ -249,7 +249,7 @@ class SnmpClientRequestAggregatorTest {
         final String tableName = "fooBarTable";
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).table(target, tableName, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).table(target, tableName, SOME_OIDS);
         }
 
         verify(snmpClient).table(target, tableName, SOME_OIDS);
@@ -265,7 +265,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false);
             request.table(COMMUNIT_TARGET, tableName, columns);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -293,7 +293,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).table(COMMUNIT_TARGET, tableName, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).table(COMMUNIT_TARGET, tableName, SOME_OIDS);
         }
 
         loggerExt.getAppender().assertLogWithMessage(
@@ -317,7 +317,7 @@ class SnmpClientRequestAggregatorTest {
                 .toString();
 
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            aggregator.createRequest(snmpClient).table(COMMUNIT_TARGET, tableName, SOME_OIDS);
+            aggregator.createRequest(snmpClient, false).table(COMMUNIT_TARGET, tableName, SOME_OIDS);
         }
 
         final String expectedLogMessage = String.format("error invoking `table` operation. %s", expectedLogDetails);
@@ -349,7 +349,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false);
             request.get(COMMUNIT_TARGET, new OID[]{new OID("1")});
             request.get(COMMUNIT_TARGET, new OID[]{new OID("2")});
             request.walk(COMMUNIT_TARGET, new OID("3"));
@@ -395,7 +395,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, true);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.table(COMMUNIT_TARGET, "tableOne", SOME_OIDS);
             request.walk(COMMUNIT_TARGET, new OID("2"));
@@ -423,7 +423,7 @@ class SnmpClientRequestAggregatorTest {
     }
 
     @Test
-    void requestWithErrorShouldIncludeErrorsInResult() throws Exception {
+    void requestWithErrorShouldIncludeErrorInResult() throws Exception {
         when(snmpClient.get(COMMUNIT_TARGET, SOME_OIDS))
                 .thenAnswer(p -> {
                     throw new RuntimeException("connection refused");
@@ -431,7 +431,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -460,7 +460,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, false);
             request.get(COMMUNIT_TARGET, SOME_OIDS);
             request.walk(COMMUNIT_TARGET, new OID("1"));
             request.table(COMMUNIT_TARGET, "tableOne", SOME_OIDS);
@@ -484,7 +484,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, true);
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -511,7 +511,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, true);
             request.table(COMMUNIT_TARGET, tableName, columns);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
@@ -538,7 +538,7 @@ class SnmpClientRequestAggregatorTest {
 
         final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
         try (SnmpClientRequestAggregator aggregator = createAggregator()) {
-            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient);
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequest(snmpClient, true);
             request.walk(COMMUNIT_TARGET, oid);
             request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
         }
