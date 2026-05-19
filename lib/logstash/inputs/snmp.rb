@@ -67,6 +67,13 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # Timeout in milliseconds to execute all hosts configured operations (get, walk, table).
   config :poll_hosts_timeout, :validate => :number
 
+  # Append values to the `tags` field when one or more SNMP operations fail
+  config :tag_on_failure, :validate => :array, :default => ['_snmpfailure']
+
+  # When enabled, preserves partial data from failed walk/table operations in the event.
+  # When disabled, only data from fully successful operations is included.
+  config :allow_partial_response, :validate => :boolean, :default => false
+
   def initialize(params={})
     super(params)
 
@@ -161,7 +168,11 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         definition[:security_level]
       )
 
-      request = @request_aggregator.create_request(@client)
+      if @allow_partial_response
+        request = @request_aggregator.create_request_for_partial_result(@client)
+      else
+        request = @request_aggregator.create_request_for_complete_result(@client)
+      end
       in_flight_requests << { request: request, definition: definition }
 
       if definition[:get].any?
@@ -182,7 +193,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
     in_flight_requests.each do |req|
       definition = req[:definition]
-      result_consumer = lambda do |result|
+      result_consumer = lambda do |request_result|
+        result = request_result.data
         if result&.any?
           event = targeted_event_factory.new_event(result)
           event.set(@host_protocol_field, definition[:host_protocol])
@@ -190,6 +202,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
           event.set(@host_port_field, definition[:host_port])
           event.set(@host_community_field, definition[:host_community])
           decorate(event)
+          @tag_on_failure.each { |tag| event.tag(tag) } if request_result.has_errors
           queue << event
         else
           logger.debug? && logger.debug('No SNMP data retrieved', host: definition[:host_address])

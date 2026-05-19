@@ -4,6 +4,8 @@ require "logstash/devutils/rspec/spec_helper"
 require 'logstash/plugin_mixins/ecs_compatibility_support/spec_helper'
 require_relative '../../../lib/logstash/inputs/snmp'
 
+java_import 'org.logstash.snmp.RequestResult'
+
 describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
   let(:mock_target) { double("org.snmp4j.Target") }
   let(:mock_client) { double("org.logstash.snmp.SnmpClient") }
@@ -26,7 +28,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         expect(mock_client).to receive(:close)
 
         allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
-        expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+        allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+        allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
         expect(mock_aggregator).to receive(:await).and_return({})
         expect(mock_aggregator).to receive(:close)
 
@@ -225,7 +228,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       allow(mock_client).to receive(:close).at_most(:once)
 
       allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
-      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
       expect(mock_aggregator).to receive(:await)
       allow(mock_aggregator).to receive(:close)
     end
@@ -234,7 +238,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       before(:each) do
         expect(mock_aggregator_request).to receive(:get)
         expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call({ 'foo' => 'bar' })
+          consumer.call(RequestResult.new({ 'foo' => 'bar' }, false))
         end
       end
 
@@ -259,6 +263,18 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
             expect(event.get("[@metadata][input][snmp][host][community]")).to eq("public")
             expect(event.get("host")).to eql('ip' => "127.0.0.1")
           end
+        end
+      end
+
+      context 'should not tag event when no errors' do
+        let(:config) { super().merge({ 'get' => ["1.3.6.1.2.1.1.1.0"], 'hosts' => [{ 'host' => "udp:127.0.0.1/161" }] }) }
+
+        it "does not add tags" do
+          plugin.register
+          plugin.run(queue)
+          event = queue.pop
+
+          expect(event.get("tags")).to be_nil
         end
       end
 
@@ -318,6 +334,75 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
+    context 'mocked result with errors' do
+      let(:config) do
+        super().merge({
+          'get' => ['1.3.6.1.2.1.1.1.0'],
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }]
+        })
+      end
+
+      before(:each) do
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call(RequestResult.new({ 'foo' => 'bar' }, true))
+        end
+      end
+
+      it 'should tag event with default failure tag' do
+        plugin.register
+        plugin.poll_clients(queue)
+        event = queue.pop
+
+        expect(event.get("foo")).to eq("bar")
+        expect(event.get("tags")).to include("_snmpfailure")
+        expect(event.get("_snmp_request_errors")).to be_nil
+      end
+    end
+
+    context 'allow_partial_response option' do
+      let(:config) do
+        super().merge({
+          'get' => ['1.3.6.1.2.1.1.1.0'],
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }],
+          'allow_partial_response' => allow_partial_response_value
+        })
+      end
+
+      before(:each) do
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call(RequestResult.new({ 'partial' => 'data' }, true))
+        end
+      end
+
+      context 'when set to false (default)' do
+        let(:allow_partial_response_value) { false }
+
+        it 'tags event and preserves data from successful operations' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event.get("partial")).to eq("data")
+          expect(event.get("tags")).to include("_snmpfailure")
+        end
+      end
+
+      context 'when set to true' do
+        let(:allow_partial_response_value) { true }
+
+        it 'tags event and preserves data including partial results' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event.get("partial")).to eq("data")
+          expect(event.get("tags")).to include("_snmpfailure")
+        end
+      end
+    end
+
     context 'mocked empty request result' do
       let(:config) do
         super().merge({
@@ -331,7 +416,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       before(:each) do
         expect(mock_aggregator_request).to receive(:get)
         expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call({})
+          consumer.call(RequestResult.new({}, false))
         end
 
         allow(plugin).to receive(:logger).and_return(logger)
@@ -482,7 +567,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       expect(mock_aggregator).to receive(:await)
       allow(mock_aggregator).to receive(:close)
 
-      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
       expect(mock_aggregator_request).to receive(:get)
       expect(mock_aggregator_request).to receive(:get_result_async)
     end

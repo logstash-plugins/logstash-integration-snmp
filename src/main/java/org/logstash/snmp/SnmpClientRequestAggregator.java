@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -33,8 +34,12 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         this.executor = Executors.newFixedThreadPool(threadPoolSize, new NamedThreadFactory(threadPoolName));
     }
 
-    public Request createRequest(SnmpClient client) {
-        return new Request(client, executor);
+    public Request createRequestForPartialResult(SnmpClient client) {
+        return new Request(client, executor, true);
+    }
+
+    public Request createRequestForCompleteResult(SnmpClient client) {
+        return new Request(client, executor, false);
     }
 
     public void await(Request[] requests, int timeoutMillis) throws ExecutionException, TimeoutException {
@@ -80,12 +85,15 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
     public static class Request {
         private final Executor executor;
         private final SnmpClient client;
+        private final boolean includePartialData;
         private final ConcurrentLinkedQueue<CompletableFuture<Map<String, ?>>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
+        private final AtomicBoolean hasErrors = new AtomicBoolean(false);
 
-        public Request(SnmpClient client, Executor executor) {
+        public Request(SnmpClient client, Executor executor, boolean includePartialData) {
             this.client = client;
             this.executor = executor;
+            this.includePartialData = includePartialData;
         }
 
         public void get(Target<Address> target, OID[] oids) {
@@ -129,11 +137,21 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             final Throwable throwable = getWrappedException(ex);
             final Map<String, String> logProperties = logPropertiesSupplier.get();
 
-            if (logger.isDebugEnabled()){
-                logger.error("error invoking `{}` operation, ignoring. {}", operation, logProperties, throwable);
+            if (logger.isDebugEnabled()) {
+                logger.error("error invoking `{}` operation. {}", operation, logProperties, throwable);
             } else {
                 final String errorMessage = throwable != null ? throwable.getMessage() : null;
                 logger.error("error invoking `{}` operation: {}, ignoring. {}", operation, errorMessage, logProperties);
+            }
+
+            hasErrors.set(true);
+
+            // Preserve any partial data collected before the error occurred
+            if (includePartialData && throwable instanceof SnmpClientException) {
+                final Map<String, ?> partialResult = ((SnmpClientException) throwable).getPartialResult();
+                if (partialResult != null && !partialResult.isEmpty()) {
+                    result.putAll(partialResult);
+                }
             }
 
             // Should return null (instead of empty), so it can be differentiated on the #handleRequestData from an empty response
@@ -155,9 +173,9 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
             return map;
         }
 
-        public CompletableFuture<Void> getResultAsync(Consumer<Map<String, Object>> consumer) {
+        public CompletableFuture<Void> getResultAsync(Consumer<RequestResult> consumer) {
             return toCompletableFuture()
-                    .thenAccept(p -> consumer.accept(new HashMap<>(this.result)));
+                    .thenAccept(p -> consumer.accept(new RequestResult(new HashMap<>(this.result), hasErrors.get())));
         }
 
         CompletableFuture<Void> toCompletableFuture() {
