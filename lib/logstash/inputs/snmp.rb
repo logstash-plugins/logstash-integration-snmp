@@ -72,7 +72,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   # When enabled, preserves partial data from failed walk/table operations in the event.
   # When disabled, only data from fully successful operations is included.
-  config :include_partial_data, :validate => :boolean, :default => false
+  config :allow_partial_response, :validate => :boolean, :default => false
 
   def initialize(params={})
     super(params)
@@ -168,7 +168,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         definition[:security_level]
       )
 
-      request = @request_aggregator.create_request(@client, @include_partial_data)
+      request = @request_aggregator.create_request(@client, @allow_partial_response)
       in_flight_requests << { request: request, definition: definition }
 
       if definition[:get].any?

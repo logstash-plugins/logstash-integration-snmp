@@ -358,12 +358,12 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
-    context 'include_partial_data option' do
+    context 'allow_partial_response option' do
       let(:config) do
         super().merge({
           'get' => ['1.3.6.1.2.1.1.1.0'],
           'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }],
-          'include_partial_data' => include_partial_data_value
+          'allow_partial_response' => allow_partial_response_value
         })
       end
 
@@ -375,7 +375,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
 
       context 'when set to false (default)' do
-        let(:include_partial_data_value) { false }
+        let(:allow_partial_response_value) { false }
 
         it 'tags event and preserves data from successful operations' do
           plugin.register
@@ -388,7 +388,7 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
 
       context 'when set to true' do
-        let(:include_partial_data_value) { true }
+        let(:allow_partial_response_value) { true }
 
         it 'tags event and preserves data including partial results' do
           plugin.register
