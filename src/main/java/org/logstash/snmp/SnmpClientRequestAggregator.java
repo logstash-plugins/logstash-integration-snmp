@@ -34,8 +34,12 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         this.executor = Executors.newFixedThreadPool(threadPoolSize, new NamedThreadFactory(threadPoolName));
     }
 
-    public Request createRequest(SnmpClient client, boolean includePartialData) {
-        return new Request(client, executor, includePartialData);
+    public Request createRequestForPartialResult(SnmpClient client) {
+        return new Request(client, executor, true);
+    }
+
+    public Request createRequestForCompleteResult(SnmpClient client) {
+        return new Request(client, executor, false);
     }
 
     public void await(Request[] requests, int timeoutMillis) throws ExecutionException, TimeoutException {

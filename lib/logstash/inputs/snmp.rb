@@ -168,7 +168,11 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
         definition[:security_level]
       )
 
-      request = @request_aggregator.create_request(@client, @allow_partial_response)
+      if @allow_partial_response
+        request = @request_aggregator.create_request_for_partial_result(@client)
+      else
+        request = @request_aggregator.create_request_for_complete_result(@client)
+      end
       in_flight_requests << { request: request, definition: definition }
 
       if definition[:get].any?

@@ -28,7 +28,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         expect(mock_client).to receive(:close)
 
         allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
-        expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+        allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+        allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
         expect(mock_aggregator).to receive(:await).and_return({})
         expect(mock_aggregator).to receive(:close)
 
@@ -227,7 +228,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       allow(mock_client).to receive(:close).at_most(:once)
 
       allow(plugin).to receive(:create_request_aggregator).and_return(mock_aggregator)
-      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
       expect(mock_aggregator).to receive(:await)
       allow(mock_aggregator).to receive(:close)
     end
@@ -565,7 +567,8 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       expect(mock_aggregator).to receive(:await)
       allow(mock_aggregator).to receive(:close)
 
-      expect(mock_aggregator).to receive(:create_request).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+      allow(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
       expect(mock_aggregator_request).to receive(:get)
       expect(mock_aggregator_request).to receive(:get_result_async)
     end
