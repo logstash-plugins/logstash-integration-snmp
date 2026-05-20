@@ -342,68 +342,45 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         })
       end
 
-      before(:each) do
-        expect(mock_aggregator_request).to receive(:get)
-        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call(RequestResult.new({ 'foo' => 'bar' }, true))
+      context 'when result data is not empty' do
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get)
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({ 'foo' => 'bar' }, true))
+          end
+        end
+
+        it 'should tag event with default failure tag' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event.get("foo")).to eq("bar")
+          expect(event.get("tags")).to include("_snmpfailure")
+          expect(event.get("_snmp_request_errors")).to be_nil
         end
       end
 
-      it 'should tag event with default failure tag' do
-        plugin.register
-        plugin.poll_clients(queue)
-        event = queue.pop
+      context 'when result data is empty' do
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get)
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({}, true))
+          end
+        end
 
-        expect(event.get("foo")).to eq("bar")
-        expect(event.get("tags")).to include("_snmpfailure")
-        expect(event.get("_snmp_request_errors")).to be_nil
+        it 'should generate an event with failure tag when all operations fail' do
+          plugin.register
+          plugin.poll_clients(queue)
+          event = queue.pop
+
+          expect(event).not_to be_nil
+          expect(event.get("tags")).to include("_snmpfailure")
+        end
       end
     end
 
     context 'allow_partial_response option' do
-      let(:config) do
-        super().merge({
-          'get' => ['1.3.6.1.2.1.1.1.0'],
-          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }],
-          'allow_partial_response' => allow_partial_response_value
-        })
-      end
-
-      before(:each) do
-        expect(mock_aggregator_request).to receive(:get)
-        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call(RequestResult.new({ 'partial' => 'data' }, true))
-        end
-      end
-
-      context 'when set to false (default)' do
-        let(:allow_partial_response_value) { false }
-
-        it 'tags event and preserves data from successful operations' do
-          plugin.register
-          plugin.poll_clients(queue)
-          event = queue.pop
-
-          expect(event.get("partial")).to eq("data")
-          expect(event.get("tags")).to include("_snmpfailure")
-        end
-      end
-
-      context 'when set to true' do
-        let(:allow_partial_response_value) { true }
-
-        it 'tags event and preserves data including partial results' do
-          plugin.register
-          plugin.poll_clients(queue)
-          event = queue.pop
-
-          expect(event.get("partial")).to eq("data")
-          expect(event.get("tags")).to include("_snmpfailure")
-        end
-      end
-    end
-
-    context 'mocked empty result with errors' do
       let(:config) do
         super().merge({
           'get' => ['1.3.6.1.2.1.1.1.0'],
@@ -412,19 +389,28 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
 
       before(:each) do
-        expect(mock_aggregator_request).to receive(:get)
-        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
-          consumer.call(RequestResult.new({}, true))
+        allow(mock_aggregator_request).to receive(:get)
+        allow(mock_aggregator_request).to receive(:get_result_async)
+      end
+
+      context 'when set to false (default)' do
+        let(:config) { super().merge('allow_partial_response' => false) }
+
+        it 'uses complete result aggregator' do
+          expect(mock_aggregator).to receive(:create_request_for_complete_result).and_return(mock_aggregator_request)
+          plugin.register
+          plugin.poll_clients(queue)
         end
       end
 
-      it 'should generate an event with failure tag when all operations fail' do
-        plugin.register
-        plugin.poll_clients(queue)
-        event = queue.pop
+      context 'when set to true' do
+        let(:config) { super().merge('allow_partial_response' => true) }
 
-        expect(event).not_to be_nil
-        expect(event.get("tags")).to include("_snmpfailure")
+        it 'uses partial result aggregator' do
+          expect(mock_aggregator).to receive(:create_request_for_partial_result).and_return(mock_aggregator_request)
+          plugin.register
+          plugin.poll_clients(queue)
+        end
       end
     end
 
