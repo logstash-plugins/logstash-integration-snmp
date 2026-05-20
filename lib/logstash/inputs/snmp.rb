@@ -195,7 +195,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       definition = req[:definition]
       result_consumer = lambda do |request_result|
         result = request_result.data
-        if result&.any?
+        if result&.any? || request_result.has_errors
           event = targeted_event_factory.new_event(result)
           event.set(@host_protocol_field, definition[:host_protocol])
           event.set(@host_address_field, definition[:host_address])
