@@ -403,6 +403,31 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
+    context 'mocked empty result with errors' do
+      let(:config) do
+        super().merge({
+          'get' => ['1.3.6.1.2.1.1.1.0'],
+          'hosts' => [{ 'host' => 'udp:127.0.0.1/161', 'community' => 'public' }]
+        })
+      end
+
+      before(:each) do
+        expect(mock_aggregator_request).to receive(:get)
+        expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+          consumer.call(RequestResult.new({}, true))
+        end
+      end
+
+      it 'should generate an event with failure tag when all operations fail' do
+        plugin.register
+        plugin.poll_clients(queue)
+        event = queue.pop
+
+        expect(event).not_to be_nil
+        expect(event.get("tags")).to include("_snmpfailure")
+      end
+    end
+
     context 'mocked empty request result' do
       let(:config) do
         super().merge({
