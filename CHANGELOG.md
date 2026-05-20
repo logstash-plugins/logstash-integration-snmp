@@ -1,3 +1,6 @@
+## 4.3.1
+  - Fix: generate error events with _snmpfailure tag when all SNMP operations fail and the response data is empty (e.g., timeout) [#92](https://github.com/logstash-plugins/logstash-integration-snmp/pull/92)
+
 ## 4.3.0
   - Handle partial responses and errors gracefully: add `tag_on_failure` (default: `["_snmpfailure"]`) to tag events when SNMP operations fail, and `allow_partial_response` (default: `false`) to preserve partial data from failed `walk`/`table` operations [#91](https://github.com/logstash-plugins/logstash-integration-snmp/pull/91)
 
