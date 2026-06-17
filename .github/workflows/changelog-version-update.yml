@@ -32,6 +32,7 @@ on:
 jobs:
   changelog:
     uses: logstash-plugins/.github/.github/workflows/pr-prepare.yml@main
+    secrets: inherit
     with:
       command: ${{ inputs.command }}
       pr_number: ${{ inputs.pr_number }}
