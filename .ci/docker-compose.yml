@@ -1,5 +1,5 @@
-# run tests:  cd ci/unit; docker-compose up --build --force-recreate
-# manual:  cd ci/unit; docker-compose run logstash bash
+# run tests:  cd ci/unit; docker compose up --build --force-recreate
+# manual:  cd ci/unit; docker compose run logstash bash
 services:
 
   logstash:
