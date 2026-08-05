@@ -92,6 +92,7 @@ public class SnmpClient implements Closeable {
     private final String host;
     private final int port;
     private final boolean mapOidVariableValues;
+    private final int maxRepetitions;
     private final Map<OctetString, Integer> usmUsersSecurityLevel = new HashMap<>();
 
     static {
@@ -116,7 +117,8 @@ public class SnmpClient implements Closeable {
             int messageDispatcherPoolSize,
             List<User> users,
             OctetString localEngineId,
-            boolean mapOidVariableValues
+            boolean mapOidVariableValues,
+            int maxRepetitions
     ) throws IOException {
         this.mib = mib;
         this.host = host;
@@ -124,6 +126,7 @@ public class SnmpClient implements Closeable {
         this.supportedVersions = supportedVersions;
         this.supportedTransports = supportedTransports;
         this.mapOidVariableValues = mapOidVariableValues;
+        this.maxRepetitions = maxRepetitions;
         users.forEach(p -> this.usmUsersSecurityLevel.put(p.getSecurityName(), p.getSecurityLevel()));
 
         // global security models/protocols
@@ -419,7 +422,9 @@ public class SnmpClient implements Closeable {
     }
 
     TreeUtils createGetTreeUtils() {
-        return new TreeUtils(getSnmp(), creatPDUFactory(PDU.GET));
+        final TreeUtils treeUtils = new TreeUtils(getSnmp(), creatPDUFactory(PDU.GET));
+        treeUtils.setMaxRepetitions(maxRepetitions);
+        return treeUtils;
     }
 
     public Map<String, List<Map<String, Object>>> table(Target<Address> target, String tableName, OID[] oids) {
@@ -489,7 +494,9 @@ public class SnmpClient implements Closeable {
     }
 
     TableUtils createGetTableUtils() {
-        return new TableUtils(getSnmp(), creatPDUFactory(PDU.GET));
+        final TableUtils tableUtils = new TableUtils(getSnmp(), creatPDUFactory(PDU.GET));
+        tableUtils.setMaxNumRowsPerPDU(maxRepetitions);
+        return tableUtils;
     }
 
     Object coerceVariable(Variable variable) {
