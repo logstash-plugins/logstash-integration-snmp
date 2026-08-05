@@ -1,3 +1,6 @@
+## 4.4.0
+  - Expose `max_repetitions` config option to the SNMP input plugin, allowing users to control the max-repetitions field in GETBULK PDUs used by walk and table operations. [#97](https://github.com/logstash-plugins/logstash-integration-snmp/pull/97)
+
 ## 4.3.1
   - Fix: generate error events with _snmpfailure tag when all SNMP operations fail and the response data is empty (e.g., timeout) [#92](https://github.com/logstash-plugins/logstash-integration-snmp/pull/92)
 
