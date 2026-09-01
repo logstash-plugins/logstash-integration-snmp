@@ -1,3 +1,6 @@
+## 4.4.1
+  - Fix that avoids random null fields on table read. [#98](https://github.com/logstash-plugins/logstash-integration-snmp/pull/98)
+
 ## 4.4.0
   - Expose `max_repetitions` config option to the SNMP input plugin, allowing users to control the max-repetitions field in GETBULK PDUs used by walk and table operations. [#97](https://github.com/logstash-plugins/logstash-integration-snmp/pull/97)
 
