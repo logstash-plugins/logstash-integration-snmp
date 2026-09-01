@@ -86,7 +86,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private final Executor executor;
         private final SnmpClient client;
         private final boolean includePartialData;
-        private final ConcurrentLinkedQueue<CompletableFuture<Map<String, ?>>> futures = new ConcurrentLinkedQueue<>();
+        private final ConcurrentLinkedQueue<CompletableFuture<Void>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
         private final AtomicBoolean hasErrors = new AtomicBoolean(false);
 
@@ -117,10 +117,9 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private void submitRequestTask(Target<Address> target, String operation, OID[] oids, Map<String, String> extraLogDetails, Supplier<Map<String, ?>> task) {
             final Supplier<Map<String, String>> logPropertiesSupplier = () -> createLogDetails(target, oids, extraLogDetails);
 
-            final CompletableFuture<Map<String, ?>> future = CompletableFuture.supplyAsync(task, executor)
-                    .exceptionally(ex -> handleRequestException(operation, ex, logPropertiesSupplier));
-
-            future.thenAccept(data -> handleRequestData(operation, data, logPropertiesSupplier));
+            final CompletableFuture<Void> future = CompletableFuture.supplyAsync(task, executor)
+                    .exceptionally(ex -> handleRequestException(operation, ex, logPropertiesSupplier))
+                    .thenAccept(data -> handleRequestData(operation, data, logPropertiesSupplier));
 
             this.futures.add(future);
         }
