@@ -92,6 +92,7 @@ public class SnmpClient implements Closeable {
     private final String host;
     private final int port;
     private final boolean mapOidVariableValues;
+    private final boolean mapEnumValues;
     private final int maxRepetitions;
     private final Map<OctetString, Integer> usmUsersSecurityLevel = new HashMap<>();
 
@@ -118,6 +119,7 @@ public class SnmpClient implements Closeable {
             List<User> users,
             OctetString localEngineId,
             boolean mapOidVariableValues,
+            boolean mapEnumValues,
             int maxRepetitions
     ) throws IOException {
         this.mib = mib;
@@ -126,6 +128,7 @@ public class SnmpClient implements Closeable {
         this.supportedVersions = supportedVersions;
         this.supportedTransports = supportedTransports;
         this.mapOidVariableValues = mapOidVariableValues;
+        this.mapEnumValues = mapEnumValues;
         this.maxRepetitions = maxRepetitions;
         users.forEach(p -> this.usmUsersSecurityLevel.put(p.getSecurityName(), p.getSecurityLevel()));
 
@@ -254,7 +257,7 @@ public class SnmpClient implements Closeable {
                 final Map<String, Object> trapEvent = createTrapEvent(version, securityName, event.getPDU());
                 final Map<String, Object> formattedVarBindings = new HashMap<>(event.getPDU().getVariableBindings().size());
                 for (VariableBinding binding : event.getPDU().getVariableBindings()) {
-                    formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getVariable()));
+                    formattedVarBindings.put(mib.map(binding.getOid()), coerceVariable(binding.getOid(), binding.getVariable()));
                 }
 
                 final SnmpTrapMessage trapMessage = new SnmpTrapMessage(
@@ -330,7 +333,7 @@ public class SnmpClient implements Closeable {
 
         final Map<String, Object> coercedVarBindings = new HashMap<>(pdu.getVariableBindings().size());
         for (VariableBinding binding : pdu.getVariableBindings()) {
-            coercedVarBindings.put(binding.getOid().toString(), coerceVariable(binding.getVariable()));
+            coercedVarBindings.put(binding.getOid().toString(), coerceVariable(binding.getOid(), binding.getVariable()));
         }
 
         trapEvent.put("variable_bindings", coercedVarBindings);
@@ -364,8 +367,7 @@ public class SnmpClient implements Closeable {
 
         final Map<String, Object> result = new HashMap<>();
         for (VariableBinding binding : responsePdu.getVariableBindings()) {
-            final String oid = mib.map(binding.getOid());
-            result.put(oid, coerceVariable(binding.getVariable()));
+            result.put(mib.map(binding.getOid()), coerceVariable(binding.getOid(), binding.getVariable()));
         }
 
         return result;
@@ -403,10 +405,7 @@ public class SnmpClient implements Closeable {
                     continue;
                 }
 
-                result.put(
-                        mib.map(variableBinding.getOid()),
-                        coerceVariable(variableBinding.getVariable())
-                );
+                result.put(mib.map(variableBinding.getOid()), coerceVariable(variableBinding.getOid(), variableBinding.getVariable()));
             }
         }
 
@@ -462,9 +461,8 @@ public class SnmpClient implements Closeable {
                     continue;
                 }
 
-                final String mappedOid = mib.map(removeVariableOidIndex(binding.getOid(), event.getIndex()));
-                final Object value = coerceVariable(binding.getVariable());
-                row.put(mappedOid, value);
+                final OID columnOid = removeVariableOidIndex(binding.getOid(), event.getIndex());
+                row.put(mib.map(columnOid), coerceVariable(columnOid, binding.getVariable()));
             }
             
             rows.add(row);
@@ -499,7 +497,7 @@ public class SnmpClient implements Closeable {
         return tableUtils;
     }
 
-    Object coerceVariable(Variable variable) {
+    Object coerceVariable(OID oid, Variable variable) {
         if (variable.isException()) {
             switch (variable.getSyntax()) {
                 case SMIConstants.EXCEPTION_NO_SUCH_INSTANCE:
@@ -524,7 +522,14 @@ public class SnmpClient implements Closeable {
 
         // Integer32
         if (variable instanceof AssignableFromInteger) {
-            return variable.toInt();
+            final int value = variable.toInt();
+            if (mapEnumValues) {
+                final String name = mib.resolveEnumValueName(oid, value);
+                if (name != null) {
+                    return name;
+                }
+            }
+            return value;
         }
 
         // OIDs values

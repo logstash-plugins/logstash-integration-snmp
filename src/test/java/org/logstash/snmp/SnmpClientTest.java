@@ -80,6 +80,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -491,7 +492,7 @@ class SnmpClientTest {
             final Map<String, Object> response = client.get(target, new OID[]{new OID("1.1"), new OID("1.2")});
 
             assertFalse(response.isEmpty());
-            responseVariables.forEach(binding -> verify(client).coerceVariable(binding.getVariable()));
+            responseVariables.forEach(binding -> verify(client).coerceVariable(any(OID.class), eq(binding.getVariable())));
             assertEquals("foo", response.get("iso.foo"));
             assertEquals("bar", response.get("iso.bar"));
         }
@@ -644,7 +645,7 @@ class SnmpClientTest {
             final Map<String, Object> response = client.walk(target, new OID("1"));
 
             assertFalse(response.isEmpty());
-            responseVariables.forEach(binding -> verify(client).coerceVariable(binding.getVariable()));
+            responseVariables.forEach(binding -> verify(client).coerceVariable(any(OID.class), eq(binding.getVariable())));
             assertEquals("foo", response.get("iso.foo"));
             assertEquals("bar", response.get("iso.bar"));
         }
@@ -806,7 +807,7 @@ class SnmpClientTest {
             final var response = client.table(target, tableName, new OID[]{new OID("1")});
             assertFalse(response.isEmpty());
             Arrays.stream(responseVariables)
-                    .forEach(binding -> verify(client, times(2)).coerceVariable(binding.getVariable()));
+                    .forEach(binding -> verify(client, times(2)).coerceVariable(any(OID.class), eq(binding.getVariable())));
 
 
             final List<Map<String, Object>> fooBarTable = response.get(tableName);
@@ -894,41 +895,41 @@ class SnmpClientTest {
     void coerceVariableShouldReturnErrorStringsWhenIsException() throws IOException {
         try (SnmpClient client = createClient()) {
             assertEquals("error: no such instance currently exists at this OID",
-                    client.coerceVariable(new Null(SMIConstants.EXCEPTION_NO_SUCH_INSTANCE)));
+                    client.coerceVariable(new OID("1.1"), new Null(SMIConstants.EXCEPTION_NO_SUCH_INSTANCE)));
 
             assertEquals("error: no such object currently exists at this OID",
-                    client.coerceVariable(new Null(SMIConstants.EXCEPTION_NO_SUCH_OBJECT)));
+                    client.coerceVariable(new OID("1.1"), new Null(SMIConstants.EXCEPTION_NO_SUCH_OBJECT)));
 
             assertEquals("error: end of MIB view",
-                    client.coerceVariable(new Null(SMIConstants.EXCEPTION_END_OF_MIB_VIEW)));
+                    client.coerceVariable(new OID("1.1"), new Null(SMIConstants.EXCEPTION_END_OF_MIB_VIEW)));
         }
     }
 
     @Test
     void coerceVariableShouldReturnNullWordWhenSyntaxIsAsnNull() throws IOException {
         try (SnmpClient client = createClient()) {
-            assertEquals("null", client.coerceVariable(new Null()));
+            assertEquals("null", client.coerceVariable(new OID("1.1"), new Null()));
         }
     }
 
     @Test
     void coerceVariableShouldReturnParsedValueWhenVarIsAssignableFromNumber() throws IOException {
         try (SnmpClient client = createClient()) {
-            assertEquals(1L, client.coerceVariable(new Counter32(1L)));
-            assertEquals(2L, client.coerceVariable(new Counter64(2L)));
-            assertEquals(3L, client.coerceVariable(new Gauge32(3L)));
-            assertEquals(4L, client.coerceVariable(new TimeTicks(4L)));
-            assertEquals(5L, client.coerceVariable(new UnsignedInteger32(5L)));
-            assertEquals(1, client.coerceVariable(new Integer32(1)));
+            assertEquals(1L, client.coerceVariable(new OID("1.1"), new Counter32(1L)));
+            assertEquals(2L, client.coerceVariable(new OID("1.1"), new Counter64(2L)));
+            assertEquals(3L, client.coerceVariable(new OID("1.1"), new Gauge32(3L)));
+            assertEquals(4L, client.coerceVariable(new OID("1.1"), new TimeTicks(4L)));
+            assertEquals(5L, client.coerceVariable(new OID("1.1"), new UnsignedInteger32(5L)));
+            assertEquals(1, client.coerceVariable(new OID("1.1"), new Integer32(1)));
         }
     }
 
     @Test
     void coerceVariableShouldReturnStringValueWhenVarIsNotAssignableFromNumber() throws IOException {
         try (SnmpClient client = createClient()) {
-            assertEquals("0.0.0.0", client.coerceVariable(new IpAddress()));
-            assertEquals("foo", client.coerceVariable(new OctetString("foo")));
-            assertEquals("62:61:72", client.coerceVariable(new Opaque("bar".getBytes())));
+            assertEquals("0.0.0.0", client.coerceVariable(new OID("1.1"), new IpAddress()));
+            assertEquals("foo", client.coerceVariable(new OID("1.1"), new OctetString("foo")));
+            assertEquals("62:61:72", client.coerceVariable(new OID("1.1"), new Opaque("bar".getBytes())));
         }
     }
 
@@ -944,7 +945,7 @@ class SnmpClientTest {
 
             assertEquals(
                     "error: unable to read variable value. Syntax: 4 (OCTET STRING)",
-                    client.coerceVariable(erroredVariable)
+                    client.coerceVariable(new OID("1.1"), erroredVariable)
             );
         }
     }
@@ -952,7 +953,7 @@ class SnmpClientTest {
     @Test
     void coerceVariableShouldNotMapOidVariableValueByDefault() throws IOException {
         try (SnmpClient client = createClient()) {
-            assertEquals("1.1", client.coerceVariable(new OID("1.1")));
+            assertEquals("1.1", client.coerceVariable(new OID("1.1"), new OID("1.1")));
             verifyNoInteractions(mibManager);
         }
     }
@@ -966,7 +967,41 @@ class SnmpClientTest {
             when(mibManager.map(any(OID.class)))
                     .thenReturn("foo.bar");
 
-            assertEquals("foo.bar", client.coerceVariable(new OID("1.1")));
+            assertEquals("foo.bar", client.coerceVariable(new OID("1.1"), new OID("1.1")));
+        }
+    }
+
+    @Test
+    void coerceVariableShouldNotMapEnumValueByDefault() throws IOException {
+        try (SnmpClient client = createClient()) {
+            assertEquals(1, client.coerceVariable(new OID("1.3.6.1.2.1.2.2.1.8.1"), new Integer32(1)));
+            verifyNoInteractions(mibManager);
+        }
+    }
+
+    @Test
+    void coerceVariableShouldMapEnumValueWhenTrue() throws IOException {
+        try (SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setMapEnumValues(true)
+                .build()) {
+
+            final OID oid = new OID("1.3.6.1.2.1.2.2.1.8.1");
+            when(mibManager.resolveEnumValueName(oid, 1)).thenReturn("up");
+
+            assertEquals("up", client.coerceVariable(oid, new Integer32(1)));
+        }
+    }
+
+    @Test
+    void coerceVariableShouldKeepIntegerWhenEnumNameIsUnknown() throws IOException {
+        try (SnmpClient client = createClientBuilder(Set.of("udp"))
+                .setMapEnumValues(true)
+                .build()) {
+
+            final OID oid = new OID("1.3.6.1.2.1.2.2.1.8.1");
+            when(mibManager.resolveEnumValueName(oid, 1)).thenReturn(null);
+
+            assertEquals(1, client.coerceVariable(oid, new Integer32(1)));
         }
     }
 
@@ -1310,7 +1345,7 @@ class SnmpClientTest {
             assertNotNull(snmpTrapMessage);
 
             pdu.getVariableBindings().forEach(
-                    binding -> verify(client, times(2)).coerceVariable(binding.getVariable()));
+                    binding -> verify(client, times(2)).coerceVariable(any(OID.class), eq(binding.getVariable())));
 
             return snmpTrapMessage;
         }

@@ -12,6 +12,7 @@ import org.snmp4j.smi.OID;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
@@ -111,7 +112,32 @@ class SmilibPythonMibReader implements MibReader {
                 .map(JsonNode::textValue)
                 .orElseGet(() -> FileUtils.getFileNameWithoutExtension(path));
 
-        consumer.accept(oid, new OidData(nodeType, nodeName, moduleName));
+        consumer.accept(oid, new OidData(nodeType, nodeName, moduleName, readNamedValues(path, nodeName, node)));
+    }
+
+    private Map<Integer, String> readNamedValues(Path path, String nodeName, JsonNode node) {
+        final JsonNode type = node.path("syntax").path("type");
+        if (!"Enumeration".equals(type.path("basetype").textValue())) {
+            return Map.of();
+        }
+
+        final Map<Integer, String> namedValues = new HashMap<>();
+        for (Iterator<Map.Entry<String, JsonNode>> it = type.fields(); it.hasNext(); ) {
+            final Map.Entry<String, JsonNode> entry = it.next();
+            final JsonNode child = entry.getValue();
+            if (!child.isObject() || !"namednumber".equals(child.path("nodetype").textValue())) {
+                continue;
+            }
+
+            final String number = child.path("number").textValue();
+            try {
+                namedValues.put(Integer.parseInt(number), entry.getKey());
+            } catch (NumberFormatException e) {
+                logger.warn("The MIB file `{}` node `{}` has an invalid enum value `{}` for `{}`. Skipping", path, nodeName, number, entry.getKey());
+            }
+        }
+
+        return Map.copyOf(namedValues);
     }
 
     private String sanitize(String content) {

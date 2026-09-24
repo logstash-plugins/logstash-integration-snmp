@@ -51,6 +51,26 @@ class OidTrie {
         return find(oid, null);
     }
 
+    Optional<OidData> findDeepestData(OID oid) {
+        OidTrieNode current = root;
+        OidData deepest = null;
+
+        for (int identifier : oid.getValue()) {
+            final OidTrieNode node = current.getChildren().get(identifier);
+            if (node == null) {
+                break;
+            }
+
+            if (node.hasData()) {
+                deepest = node.getData();
+            }
+
+            current = node;
+        }
+
+        return Optional.ofNullable(deepest);
+    }
+
     Optional<OidData> find(OID oid, Consumer<OidTrieNode> edgesConsumer) {
         OidTrieNode current = root;
 
