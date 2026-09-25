@@ -161,6 +161,7 @@ shared_examples 'a common SNMP plugin' do
         it 'should not raise' do
           expect(client_builder).to receive(:addUsmUser)
           expect(client_builder).to receive(:setMapOidVariableValues)
+          expect(client_builder).to receive(:setMapEnumValues)
           expect(client_builder).to receive(:build)
           expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
         end
@@ -192,6 +193,7 @@ shared_examples 'a common SNMP plugin' do
           it 'should not raise' do
             expect(client_builder).to receive(:addUsmUser)
             expect(client_builder).to receive(:setMapOidVariableValues)
+            expect(client_builder).to receive(:setMapEnumValues)
             expect(client_builder).to receive(:build)
             expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
           end
@@ -203,6 +205,7 @@ shared_examples 'a common SNMP plugin' do
           it 'should not raise' do
             expect(client_builder).to receive(:addUsmUser)
             expect(client_builder).to receive(:setMapOidVariableValues)
+            expect(client_builder).to receive(:setMapEnumValues)
             expect(client_builder).to receive(:build)
             expect { plugin.build_snmp_client!(client_builder, validate_usm_user: true) }.to_not raise_error
           end
