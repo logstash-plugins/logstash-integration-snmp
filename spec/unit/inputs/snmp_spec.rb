@@ -334,6 +334,126 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
       end
     end
 
+    context 'mocked tables' do
+      before(:each) do
+        allow(mock_aggregator_request).to receive(:get)
+        allow(mock_aggregator_request).to receive(:table)
+      end
+
+      context 'with split_tables' do
+        let(:config) do
+          super().merge({
+            'hosts' => [{ 'host' => "udp:127.0.0.1/161" }],
+            'get' => ["1.3.6.1.2.1.1.5.0"],
+            'tables' => [{ 'name' => 'interfaces', 'columns' => ['1.3.6.1.2.1.2.2.1.2'] }],
+            'split_tables' => true
+          })
+        end
+
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({
+              'sysName' => 'test-agent',
+              'interfaces' => [{ 'index' => '1', 'ifDescr' => 'lo' }, { 'index' => '2', 'ifDescr' => 'eth0' }]
+            }, false))
+          end
+        end
+
+        it 'emits one event per row, with scalar fields on each' do
+          plugin.register
+          plugin.run(queue)
+          events = 2.times.map { queue.pop }
+
+          expect(events.map { |e| e.get('[interfaces][index]') }).to contain_exactly('1', '2')
+          events.each { |e| expect(e.get('sysName')).to eq('test-agent') }
+        end
+      end
+
+      context 'with split_tables and multiple tables' do
+        let(:config) do
+          super().merge({
+            'hosts' => [{ 'host' => "udp:127.0.0.1/161" }],
+            'tables' => [
+              { 'name' => 'interfaces', 'columns' => ['1.3.6.1.2.1.2.2.1.2'] },
+              { 'name' => 'cpu', 'columns' => ['1.3.6.1.2.1.25.3.3.1.2'] }
+            ],
+            'split_tables' => true
+          })
+        end
+
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({
+              'interfaces' => [{ 'index' => '1' }, { 'index' => '2' }],
+              'cpu' => [{ 'index' => '1' }]
+            }, false))
+          end
+        end
+
+        it 'emits rows per table without a cross-product' do
+          plugin.register
+          plugin.run(queue)
+          events = 3.times.map { queue.pop }
+
+          expect(events.count { |e| e.get('interfaces') }).to eq(2)
+          expect(events.count { |e| e.get('cpu') }).to eq(1)
+        end
+      end
+
+      context 'with split_tables and an empty table' do
+        let(:config) do
+          super().merge({
+            'hosts' => [{ 'host' => "udp:127.0.0.1/161" }],
+            'get' => ["1.3.6.1.2.1.1.5.0"],
+            'tables' => [{ 'name' => 'interfaces', 'columns' => ['1.3.6.1.2.1.2.2.1.2'] }],
+            'split_tables' => true
+          })
+        end
+
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({ 'sysName' => 'test-agent', 'interfaces' => [] }, false))
+          end
+        end
+
+        it 'emits a single event with the scalar fields' do
+          plugin.register
+          plugin.run(queue)
+          event = queue.pop
+
+          expect(event.get('sysName')).to eq('test-agent')
+          expect(event.get('interfaces')).to be_nil
+        end
+      end
+
+      context 'without split_tables (default)' do
+        let(:config) do
+          super().merge({
+            'hosts' => [{ 'host' => "udp:127.0.0.1/161" }],
+            'tables' => [{ 'name' => 'interfaces', 'columns' => ['1.3.6.1.2.1.2.2.1.2'] }]
+          })
+        end
+
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({
+              'interfaces' => [{ 'index' => '1' }, { 'index' => '2' }]
+            }, false))
+          end
+        end
+
+        it 'emits a single aggregated event' do
+          plugin.register
+          plugin.run(queue)
+
+          expect(queue.size).to eq(1)
+          event = queue.pop
+          expect(event.get('[interfaces][0][index]')).to eq('1')
+          expect(event.get('[interfaces][1][index]')).to eq('2')
+        end
+      end
+    end
+
     context 'mocked result with errors' do
       let(:config) do
         super().merge({
