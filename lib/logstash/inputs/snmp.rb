@@ -241,7 +241,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   end
 
   # Splits `tables` results into one event per row, keeping the `get`/`walk` scalar fields
-  # on each row event. Non-table (scalar) data with no rows is emitted as a single event.
+  # on each row event. With no rows, scalar data or a failed poll is emitted as a single event.
   def emit_split_table_events(queue, definition, request_result, result)
     scalars = {}
     tables = {}
@@ -257,7 +257,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       end
     end
 
-    emit_event(queue, definition, request_result, scalars) if !emitted && scalars.any?
+    emit_event(queue, definition, request_result, scalars) if !emitted && (scalars.any? || request_result.has_errors)
   end
 
   def poll_hosts_timeout(max_host_timeout)

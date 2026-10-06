@@ -405,9 +405,12 @@ filter {
   * Default value is `false`
 
 When enabled, each <<plugins-{type}s-{plugin}-tables>> row is emitted as its own event
-instead of a single aggregated event. Each row event also carries the `get` and `walk`
-scalar fields from the same poll. This is equivalent to using a `split` filter on the table
+instead of a single aggregated event. This is equivalent to using a `split` filter on the table
 field.
+
+The `get` and `walk` fields from the same poll are copied onto every row event. Keep them to
+device-level values, such as the `system` group. Walking table data (for example `ifTable`)
+alongside `split_tables` copies every row's walked values onto every row event.
 
 [id="plugins-{type}s-{plugin}-tables"]
 ===== `tables`

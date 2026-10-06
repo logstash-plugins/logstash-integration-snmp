@@ -426,6 +426,30 @@ describe LogStash::Inputs::Snmp, :ecs_compatibility_support do
         end
       end
 
+      context 'with split_tables when all operations fail' do
+        let(:config) do
+          super().merge({
+            'hosts' => [{ 'host' => "udp:127.0.0.1/161" }],
+            'tables' => [{ 'name' => 'interfaces', 'columns' => ['1.3.6.1.2.1.2.2.1.2'] }],
+            'split_tables' => true
+          })
+        end
+
+        before(:each) do
+          expect(mock_aggregator_request).to receive(:get_result_async) do |consumer|
+            consumer.call(RequestResult.new({}, true))
+          end
+        end
+
+        it 'emits a single event with the failure tag' do
+          plugin.register
+          plugin.run(queue)
+
+          expect(queue.size).to eq(1)
+          expect(queue.pop.get('tags')).to include('_snmpfailure')
+        end
+      end
+
       context 'without split_tables (default)' do
         let(:config) do
           super().merge({
