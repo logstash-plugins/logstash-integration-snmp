@@ -178,7 +178,7 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       else
         request = @request_aggregator.create_request_for_complete_result(@client)
       end
-      in_flight_requests << { request: request, definition: definition }
+      in_flight_requests << { request: request, definition: definition, start_time: Time.now }
 
       if definition[:get].any?
         request.get(target, definition[:get].map { |oid| OID.new(oid) })
@@ -199,6 +199,9 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     in_flight_requests.each do |req|
       definition = req[:definition]
       result_consumer = lambda do |request_result|
+        logger.debug? && logger.debug('SNMP host poll completed',
+          host: definition[:host_address], duration_seconds: (Time.now - req[:start_time]).round(3),
+          has_errors: request_result.has_errors)
         result = request_result.data
         if result&.any? || request_result.has_errors
           event = targeted_event_factory.new_event(result)
