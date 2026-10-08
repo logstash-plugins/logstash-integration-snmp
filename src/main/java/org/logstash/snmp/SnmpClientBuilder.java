@@ -31,6 +31,7 @@ public final class SnmpClientBuilder {
     private String messageDispatcherPoolName = "SnmpMessageDispatcherWorker";
     private Duration closeTimeoutDuration;
     private boolean mapOidVariableValues = false;
+    private boolean mapEnumValues = false;
     private int maxRepetitions;
 
     public SnmpClientBuilder(MibManager mib, Set<String> supportedTransports, int port) {
@@ -102,6 +103,11 @@ public final class SnmpClientBuilder {
         return this;
     }
 
+    public SnmpClientBuilder setMapEnumValues(final boolean mapEnumValues) {
+        this.mapEnumValues = mapEnumValues;
+        return this;
+    }
+
     public SnmpClientBuilder setMaxRepetitions(final int maxRepetitions) {
         this.maxRepetitions = maxRepetitions;
         return this;
@@ -119,6 +125,7 @@ public final class SnmpClientBuilder {
                 usmUsers,
                 localEngineId,
                 mapOidVariableValues,
+                mapEnumValues,
                 maxRepetitions
         );
 

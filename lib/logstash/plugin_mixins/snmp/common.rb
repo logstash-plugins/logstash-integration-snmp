@@ -52,6 +52,10 @@ module LogStash
           # set on the `oid_mapping_format`.
           base.config :oid_map_field_values, :validate => :boolean, :default => false
 
+          # Replaces integer values that have a named-number (enum) definition in the loaded
+          # MIBs with their textual name (e.g. `ifOperStatus` 1 -> "up").
+          base.config :map_enum_values, :validate => :boolean, :default => false
+
           # Number of OID root digits to ignore in event field name. For example, in a numeric OID
           # like 1.3.6.1.2.1.1.1.0" the first 5 digits could be ignored by setting oid_root_skip => 5
           # which would result in a field name "1.1.1.0". Similarly when a MIB is used an OID such
@@ -122,6 +126,7 @@ module LogStash
           end
 
           client_builder.setMapOidVariableValues(@oid_map_field_values)
+          client_builder.setMapEnumValues(@map_enum_values)
           client_builder.build
         end
 

@@ -75,6 +75,13 @@ public class MibManager {
         return fieldMapper.map(oid, resolvedIdentifiers.toArray(ResolvedIdentifier[]::new));
     }
 
+    public String resolveEnumValueName(final OID oid, final int value) {
+        return oidTrie.findDeepestData(oid)
+                .map(OidData::getNamedValues)
+                .map(namedValues -> namedValues.get(value))
+                .orElse(null);
+    }
+
     Map<String, MibReader> getMibFileReaders() {
         return Collections.unmodifiableMap(mibFileReaders);
     }

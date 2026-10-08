@@ -48,6 +48,17 @@ class SmilibPythonMibReaderTest {
     }
 
     @Test
+    void shouldReadEnumNamedValues() {
+        final Map<OID, OidData> result = new HashMap<>();
+
+        reader.read(List.of(RFC1213_MIB), result::put);
+
+        final OidData ifOperStatus = result.get(new OID("1.3.6.1.2.1.2.2.1.8"));
+        assertNotNull(ifOperStatus);
+        assertEquals(Map.of(1, "up", 2, "down", 3, "testing"), ifOperStatus.getNamedValues());
+    }
+
+    @Test
     void shouldReadNotificationOids() {
         final String moduleName = "ACCOUNTING-CONTROL-MIB";
         final String notificationType = "notification";
