@@ -78,6 +78,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-allow_partial_response>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-interval>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-local_engine_id>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-map_enum_values>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-max_repetitions>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
@@ -244,6 +245,15 @@ input {
   }
 }
 -----
+
+[id="plugins-{type}s-{plugin}-map_enum_values"]
+===== `map_enum_values`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+When enabled, integer values that have a named-number (enum) definition in the loaded MIBs
+are replaced with their textual name (for example, `ifOperStatus` `1` becomes `"up"`).
 
 [id="plugins-{type}s-{plugin}-mib_paths"]
 ===== `mib_paths`

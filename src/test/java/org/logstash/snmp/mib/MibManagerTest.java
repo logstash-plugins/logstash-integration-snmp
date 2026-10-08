@@ -3,6 +3,7 @@ package org.logstash.snmp.mib;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.logstash.snmp.DefaultOidFieldMapper;
 import org.logstash.snmp.OidFieldMapper;
 import org.logstash.snmp.Resources;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -53,6 +55,17 @@ class MibManagerTest {
                 "yaml", yamlMibReader
         );
         mibManager = new MibManager(oidTrie, oidFieldMapper, fileReaders);
+    }
+
+    @Test
+    void resolveEnumValueNameReturnsMibEnumNameForColumnInstanceOid() throws IOException {
+        final MibManager realMibManager = new MibManager(new DefaultOidFieldMapper(0, 0));
+        realMibManager.add(Resources.path("RFC1213-MIB.dic").toString());
+
+        final OID ifOperStatus = new OID("1.3.6.1.2.1.2.2.1.8.1");
+        assertEquals("up", realMibManager.resolveEnumValueName(ifOperStatus, 1));
+        assertNull(realMibManager.resolveEnumValueName(ifOperStatus, 99));
+        assertNull(realMibManager.resolveEnumValueName(new OID("1.3.6.1.2.1.2.2.1.2.1"), 1));
     }
 
     @Test

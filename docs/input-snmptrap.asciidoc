@@ -94,6 +94,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-community>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-ecs_compatibility>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-host>> |<<string,string>>|No
+| <<plugins-{type}s-{plugin}-map_enum_values>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-mib_paths>> |<<path,path>>|No
 | <<plugins-{type}s-{plugin}-oid_mapping_format>> |<<string,string>>, one of `["default", "ruby_snmp", "dotted_string"]`|No
 | <<plugins-{type}s-{plugin}-oid_map_field_values>> |<<boolean,boolean>>|Yes
@@ -179,6 +180,15 @@ Controls this plugin's compatibility with the {ecs-ref}[Elastic Common Schema (E
   * Default value is `"0.0.0.0"`
 
 The address to listen on.
+
+[id="plugins-{type}s-{plugin}-map_enum_values"]
+===== `map_enum_values`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+When enabled, integer values that have a named-number (enum) definition in the loaded MIBs
+are replaced with their textual name (for example, `ifOperStatus` `1` becomes `"up"`).
 
 [id="plugins-{type}s-{plugin}-mib_paths"]
 ===== `mib_paths`

@@ -440,6 +440,42 @@ describe LogStash::Inputs::Snmp, :integration => true do
     end
   end
 
+  context 'with map_enum_values' do
+    let(:config) do
+      super().merge({
+        'hosts' => [{ 'host' => "udp:snmpsim/163", 'version' => '3' }],
+        'security_name' => 'testuser',
+        'auth_protocol' => 'sha',
+        'auth_pass' => 'authp123',
+        'priv_protocol' => 'aes256with3desKey',
+        'priv_pass' => 'privpass123',
+        'security_level' => 'authPriv',
+        'get' => ['1.3.6.1.2.1.2.2.1.8.1'], # ifOperStatus.1 = 1 (up)
+        'use_provided_mibs' => true,
+        'mib_paths' => [],
+        'map_enum_values' => map_enum_values
+      })
+    end
+
+    context 'set to false' do
+      let(:map_enum_values) { false }
+
+      it 'should not translate enum values' do
+        event = run_plugin_and_get_queue(plugin).pop
+        expect(event.get('iso.org.dod.internet.mgmt.mib-2.interfaces.ifTable.ifEntry.ifOperStatus.1')).to eq(1)
+      end
+    end
+
+    context 'set to true' do
+      let(:map_enum_values) { true }
+
+      it 'should translate enum values' do
+        event = run_plugin_and_get_queue(plugin).pop
+        expect(event.get('iso.org.dod.internet.mgmt.mib-2.interfaces.ifTable.ifEntry.ifOperStatus.1')).to eq('up')
+      end
+    end
+  end
+
   def run_plugin_and_get_queue(plugin, timeout: 30, register: true)
     poll_clients_latch = Concurrent::CountDownLatch.new(1)
 
