@@ -88,6 +88,7 @@ This plugin supports the following configuration options plus the <<plugins-{typ
 | <<plugins-{type}s-{plugin}-poll_hosts_timeout>> |<<number,number>>|No
 | <<plugins-{type}s-{plugin}-tag_on_failure>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-walk>> |<<array,array>>|No
+| <<plugins-{type}s-{plugin}-split_tables>> |<<boolean,boolean>>|No
 | <<plugins-{type}s-{plugin}-tables>> |<<array,array>>|No
 | <<plugins-{type}s-{plugin}-target>> |<<string,string>>|No
 | <<plugins-{type}s-{plugin}-threads>> |<<number,number>>|No
@@ -406,6 +407,20 @@ filter {
   }
 }
 -----
+
+[id="plugins-{type}s-{plugin}-split_tables"]
+===== `split_tables`
+
+  * Value type is <<boolean,boolean>>
+  * Default value is `false`
+
+When enabled, each <<plugins-{type}s-{plugin}-tables>> row is emitted as its own event
+instead of a single aggregated event. This is equivalent to using a `split` filter on the table
+field.
+
+The `get` and `walk` fields from the same poll are copied onto every row event. Keep them to
+device-level values, such as the `system` group. Walking table data (for example `ifTable`)
+alongside `split_tables` copies every row's walked values onto every row event.
 
 [id="plugins-{type}s-{plugin}-tables"]
 ===== `tables`

@@ -79,6 +79,10 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
   # When disabled, only data from fully successful operations is included.
   config :allow_partial_response, :validate => :boolean, :default => false
 
+  # When enabled, emits one event per `tables` row instead of a single aggregated event.
+  # Each row event carries the `get`/`walk` scalar fields. Equivalent to using a `split` filter.
+  config :split_tables, :validate => :boolean, :default => false
+
   def initialize(params={})
     super(params)
 
@@ -96,6 +100,8 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
 
   def register
     validate_config!
+
+    @table_names = Array(@tables).map { |table_entry| table_entry['name'] }
 
     mib_manager = build_mib_manager!
 
@@ -200,17 +206,15 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
       definition = req[:definition]
       result_consumer = lambda do |request_result|
         result = request_result.data
-        if result&.any? || request_result.has_errors
-          event = targeted_event_factory.new_event(result)
-          event.set(@host_protocol_field, definition[:host_protocol])
-          event.set(@host_address_field, definition[:host_address])
-          event.set(@host_port_field, definition[:host_port])
-          event.set(@host_community_field, definition[:host_community])
-          decorate(event)
-          @tag_on_failure.each { |tag| event.tag(tag) } if request_result.has_errors
-          queue << event
-        else
+        unless result&.any? || request_result.has_errors
           logger.debug? && logger.debug('No SNMP data retrieved', host: definition[:host_address])
+          next
+        end
+
+        if @split_tables && @table_names.any?
+          emit_split_table_events(queue, definition, request_result, result)
+        else
+          emit_event(queue, definition, request_result, result)
         end
       end
 
@@ -223,6 +227,37 @@ class LogStash::Inputs::Snmp < LogStash::Inputs::Base
     rescue java.util.concurrent.TimeoutException => _
       logger.error("Timed out while waiting for SNMP requests to finish. Consider increasing `poll_hosts_timeout` if the number of hosts is large")
     end
+  end
+
+  def emit_event(queue, definition, request_result, fields)
+    event = targeted_event_factory.new_event(fields)
+    event.set(@host_protocol_field, definition[:host_protocol])
+    event.set(@host_address_field, definition[:host_address])
+    event.set(@host_port_field, definition[:host_port])
+    event.set(@host_community_field, definition[:host_community])
+    decorate(event)
+    @tag_on_failure.each { |tag| event.tag(tag) } if request_result.has_errors
+    queue << event
+  end
+
+  # Splits `tables` results into one event per row, keeping the `get`/`walk` scalar fields
+  # on each row event. With no rows, scalar data or a failed poll is emitted as a single event.
+  def emit_split_table_events(queue, definition, request_result, result)
+    scalars = {}
+    tables = {}
+    result.each do |key, value|
+      (@table_names.include?(key) ? tables : scalars)[key] = value
+    end
+
+    emitted = false
+    tables.each do |name, rows|
+      rows.each do |row|
+        emit_event(queue, definition, request_result, scalars.merge(name => row))
+        emitted = true
+      end
+    end
+
+    emit_event(queue, definition, request_result, scalars) if !emitted && (scalars.any? || request_result.has_errors)
   end
 
   def poll_hosts_timeout(max_host_timeout)
