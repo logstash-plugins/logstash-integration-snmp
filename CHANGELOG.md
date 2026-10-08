@@ -1,5 +1,6 @@
 ## 4.5.0
   - Add `map_enum_values` option to replace integer values that have a MIB named-number (enum) definition with their textual name. [#99](https://github.com/logstash-plugins/logstash-integration-snmp/pull/99)
+  - Add `split_tables` option to emit one event per `tables` row instead of a single aggregated event. [#100](https://github.com/logstash-plugins/logstash-integration-snmp/pull/100)
 
 ## 4.4.1
   - Fix that avoids random null fields on table read. [#98](https://github.com/logstash-plugins/logstash-integration-snmp/pull/98)
