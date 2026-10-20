@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.Target;
 import org.snmp4j.smi.Address;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -548,6 +550,36 @@ class SnmpClientRequestAggregatorTest {
         assertTrue(requestResult.hasErrors());
         final Map<String, Object> result = requestResult.getData();
         assertEquals(0, result.size());
+    }
+
+    @Test
+    void requestWithTcpTargetShouldNotRunOperationsConcurrently() throws Exception {
+        final Target<Address> tcpTarget = new CommunityTarget<>(GenericAddress.parse("tcp:127.0.0.1/161"), new OctetString("public"));
+        final OID oid = new OID("1");
+        final AtomicInteger running = new AtomicInteger();
+        final AtomicInteger maxRunning = new AtomicInteger();
+        final Answer<Map<String, ?>> slowAnswer = invocation -> {
+            maxRunning.accumulateAndGet(running.incrementAndGet(), Math::max);
+            Thread.sleep(100);
+            running.decrementAndGet();
+            return Map.of(invocation.getMethod().getName(), "bar");
+        };
+
+        when(snmpClient.get(tcpTarget, SOME_OIDS)).thenAnswer(slowAnswer);
+        when(snmpClient.walk(tcpTarget, oid)).thenAnswer(slowAnswer);
+        when(snmpClient.table(tcpTarget, "table", SOME_OIDS)).thenAnswer(slowAnswer);
+
+        final AtomicReference<RequestResult> resultRef = new AtomicReference<>();
+        try (SnmpClientRequestAggregator aggregator = new SnmpClientRequestAggregator(3, THREAD_POOL_NAME)) {
+            final SnmpClientRequestAggregator.Request request = aggregator.createRequestForCompleteResult(snmpClient);
+            request.get(tcpTarget, SOME_OIDS);
+            request.walk(tcpTarget, oid);
+            request.table(tcpTarget, "table", SOME_OIDS);
+            request.getResultAsync(resultRef::set).get(RESULT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+        }
+
+        assertEquals(1, maxRunning.get());
+        assertEquals(3, resultRef.get().getData().size());
     }
 
     SnmpClientRequestAggregator createAggregator() {

@@ -5,6 +5,7 @@ import org.apache.logging.log4j.Logger;
 import org.snmp4j.Target;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.OID;
+import org.snmp4j.smi.TcpAddress;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -89,6 +90,7 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private final ConcurrentLinkedQueue<CompletableFuture<Void>> futures = new ConcurrentLinkedQueue<>();
         private final Map<String, Object> result = new ConcurrentHashMap<>();
         private final AtomicBoolean hasErrors = new AtomicBoolean(false);
+        private CompletableFuture<Void> lastTcpFuture = CompletableFuture.completedFuture(null);
 
         public Request(SnmpClient client, Executor executor, boolean includePartialData) {
             this.client = client;
@@ -117,9 +119,23 @@ public class SnmpClientRequestAggregator implements AutoCloseable {
         private void submitRequestTask(Target<Address> target, String operation, OID[] oids, Map<String, String> extraLogDetails, Supplier<Map<String, ?>> task) {
             final Supplier<Map<String, String>> logPropertiesSupplier = () -> createLogDetails(target, oids, extraLogDetails);
 
-            final CompletableFuture<Void> future = CompletableFuture.supplyAsync(task, executor)
+            final CompletableFuture<Map<String, ?>> requestFuture;
+            if (target.getAddress() instanceof TcpAddress) {
+                // SNMP4J (v3.8.0) is not safe for concurrent sends while a TCP connection is being
+                // established, which might drop messages and time out every operation. TCP operations
+                // are therefore chained, so only the first one opens the connection.
+                requestFuture = lastTcpFuture.thenApplyAsync(ignored -> task.get(), executor);
+            } else {
+                requestFuture = CompletableFuture.supplyAsync(task, executor);
+            }
+
+            final CompletableFuture<Void> future = requestFuture
                     .exceptionally(ex -> handleRequestException(operation, ex, logPropertiesSupplier))
                     .thenAccept(data -> handleRequestData(operation, data, logPropertiesSupplier));
+
+            if (target.getAddress() instanceof TcpAddress) {
+                lastTcpFuture = future;
+            }
 
             this.futures.add(future);
         }
